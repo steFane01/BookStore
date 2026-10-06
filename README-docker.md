@@ -40,6 +40,7 @@ Created by `sql/init/01_schema.sql`:
 | `orders`         | `OrderDraft` (shipping flattened) |
 | `order_lines`    | `OrderLine` (snapshot per purchase)|
 | `cart_items`     | optional server-side cart         |
+| `password_resets`| single-use password-reset tokens  |
 
 Enums: `user_role` (`customer`/`admin`), `book_status` (`draft`/`active`),
 `order_status` (`pending`/`processing`/`shipped`/`delivered`/`cancelled`).
@@ -77,8 +78,11 @@ The `backend/` image serves a real Express API backed by Postgres:
 - `POST /api/auth/register` — create account, persists to `users` with a bcrypt hash
 - `POST /api/auth/login` — authenticate, returns a JWT session token
 - `GET  /api/auth/me` — resolve/restore a session from the stored token
-- `POST /api/auth/request-password-reset` — sends a reset email via the mail service
+- `POST /api/auth/request-password-reset` — sends a reset email with a clickable link
+- `POST /api/auth/reset-password` — set a new password via the single-use token
 - `GET  /api/mail/status`, `POST /api/mail/test` — mail diagnostics + test send
+- `POST /api/forms/contact` — email the contact-form message to the owner's mailbox
+- `POST /api/forms/newsletter` — email a newsletter confirmation to the subscriber
 
 `/api/orders`, `/api/addresses`, `/api/cart` and `/api/users` remain stubbed (501)
 for a later pass.

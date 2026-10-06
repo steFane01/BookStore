@@ -5,6 +5,7 @@ import { booksRouter } from './routes/books.js'
 import { healthRouter } from './routes/health.js'
 import { authRouter } from './routes/auth.js'
 import { mailRouter } from './routes/mail.js'
+import { formsRouter } from './routes/forms.js'
 
 /**
  * Librăria backend.
@@ -21,8 +22,11 @@ import { mailRouter } from './routes/mail.js'
  *   POST /api/auth/register     -> create account (persists to users table)
  *   POST /api/auth/login        -> authenticate, returns JWT
  *   GET  /api/auth/me           -> resolve current session
- *   POST /api/auth/request-password-reset
- *   GET/POST /api/mail/...      -> mail diagnostics + test send
+ *   POST /api/auth/request-password-reset -> sends a reset email with a link
+ *   POST /api/auth/reset-password         -> set a new password (single-use token)
+ *   GET/POST /api/mail/...                -> mail diagnostics + test send
+ *   POST /api/forms/contact               -> email contact-form message to the owner
+ *   POST /api/forms/newsletter            -> email a newsletter confirmation
  *
  * Orders, addresses, cart and users remain stubbed (501) for a later pass.
  */
@@ -34,6 +38,7 @@ app.use('/api/health', healthRouter)
 app.use('/api/books', booksRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/mail', mailRouter)
+app.use('/api/forms', formsRouter)
 
 // ---- Stub routers (not part of the current scope) ----
 app.use('/api/orders', async (_req, res) => {

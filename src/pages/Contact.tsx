@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { siteConfig } from '../config/site'
+import { submitContact } from '../services/formsService'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
 import { FormField } from '../components/FormField'
-import { IconMail, IconPhone, IconMapPin, IconCheck } from '../components/icons'
+import { IconMail, IconPhone, IconCheck } from '../components/icons'
 
 export default function Contact() {
   const [submitted, setSubmitted] = useState(false)
@@ -11,21 +12,27 @@ export default function Contact() {
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    // Mock — no backend. Just simulate a short delay.
-    window.setTimeout(() => {
-      setBusy(false)
+    setError(null)
+    try {
+      // Emails the visitor's message TO the site's own mailbox (.env address).
+      await submitContact({ name, email, message })
       setSubmitted(true)
       setName('')
       setEmail('')
       setMessage('')
-    }, 600)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nu am putut trimite. Încearcă din nou.')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const { email: contactEmail, phone, address } = siteConfig.contact
+  const { email: contactEmail, phone } = siteConfig.contact
 
   return (
     <div className="pt-20 md:pt-24">
@@ -40,12 +47,8 @@ export default function Contact() {
         <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_22rem] lg:items-start">
           {/* Info */}
           <div className="order-2 grid gap-4 lg:order-1">
-            <InfoRow icon={<IconMapPin className="h-5 w-5" />} label="Adresă" value={address} />
             <InfoRow icon={<IconMail className="h-5 w-5" />} label="Email" value={contactEmail} />
             <InfoRow icon={<IconPhone className="h-5 w-5" />} label="Telefon" value={phone} />
-            <div className="mt-6 flex h-56 items-center justify-center border border-ink/10 bg-paper-200/50 text-sm text-ink-muted">
-              Hartă — {address}
-            </div>
           </div>
 
           {/* Form */}
@@ -64,6 +67,12 @@ export default function Contact() {
               <p className="flex items-center gap-2 text-sm text-oxblood" role="status">
                 <IconCheck className="h-4 w-4" />
                 Mulțumim! Mesajul tău a fost trimis.
+              </p>
+            )}
+
+            {!submitted && error && (
+              <p className="flex items-center gap-2 text-sm text-oxblood" role="alert">
+                {error}
               </p>
             )}
 

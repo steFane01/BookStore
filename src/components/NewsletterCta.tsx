@@ -1,17 +1,31 @@
 import { useState } from 'react'
 import { IconCheck } from './icons'
+import { subscribeNewsletter } from '../services/formsService'
 
 /**
- * Editorial newsletter call-to-action block (UI only — no real email sending).
+ * Editorial newsletter call-to-action block. "Mă abonez" sends a confirmation
+ * email to the address typed in the field (from the site's `.env` mail account);
+ * it falls back to a silent local success when the backend is offline.
  */
 export function NewsletterCta() {
   const [submitted, setSubmitted] = useState(false)
   const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim()) return
-    setSubmitted(true)
+    setBusy(true)
+    setError(null)
+    try {
+      await subscribeNewsletter(email)
+      setSubmitted(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nu am putut trimite. Încearcă din nou.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -48,9 +62,18 @@ export function NewsletterCta() {
               placeholder="adresa ta de email"
               className="field flex-1"
             />
-            <button type="submit" className="btn btn-primary px-6 py-3">
-              Mă abonez
+            <button
+              type="submit"
+              disabled={busy}
+              className="btn btn-primary px-6 py-3 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {busy ? 'Se trimite…' : 'Mă abonez'}
             </button>
+            {error && (
+              <p className="text-center text-sm text-oxblood sm:col-span-2" role="alert">
+                {error}
+              </p>
+            )}
           </form>
         )}
       </div>

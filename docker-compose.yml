@@ -52,6 +52,11 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
+      # Public base URL of the frontend, used to build clickable links in emails
+      # (e.g. the password-reset link). Prod should point at the real domain.
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      # Inbox that receives contact-form messages; defaults to SMTP_USER.
+      CONTACT_TO: ${CONTACT_TO:-}
     depends_on:
       db:
         condition: service_healthy

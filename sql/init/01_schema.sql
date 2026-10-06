@@ -160,6 +160,22 @@ CREATE TABLE cart_items (
 CREATE INDEX idx_cart_items_user ON cart_items (user_id);
 
 -- ---------------------------------------------------------------------------
+-- password_resets — single-use tokens for the "forgot password" flow
+-- (used by POST /api/auth/reset-password). Tokens are stored hashed (SHA-256)
+-- so the DB never holds a usable reset link.
+-- ---------------------------------------------------------------------------
+CREATE TABLE password_resets (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used       BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_password_resets_token ON password_resets (token_hash);
+
+-- ---------------------------------------------------------------------------
 -- Updated-at maintenance trigger for tables with `updated_at`
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$

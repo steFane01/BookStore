@@ -88,6 +88,18 @@ export const authService = {
       // non-fatal
     }
   },
+
+  /**
+   * Complete a password reset using the single-use token from the email.
+   * Throws an Error with the backend's message on an invalid/expired token.
+   */
+  async resetPassword(token: string, password: string): Promise<void> {
+    await api('/auth/reset-password', {
+      method: 'POST',
+      body: { token, password },
+      authed: false,
+    })
+  },
 }
 
 /** Human-readable statuses used across the account and admin areas. */

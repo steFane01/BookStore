@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { siteConfig } from '../config/site'
-import { IconFeather, IconMail, IconMapPin, IconPhone } from './icons'
+import { IconFeather, IconMail, IconPhone } from './icons'
 
 const exploreLinks = [
   { to: '/', label: 'Magazin' },
@@ -78,10 +78,6 @@ export function Footer() {
               <a href={`tel:${siteConfig.contact.phone.replace(/\s/g, '')}`} className="link-underline text-ink hover:text-oxblood">
                 {siteConfig.contact.phone}
               </a>
-            </li>
-            <li className="flex items-start gap-2.5">
-              <IconMapPin className="mt-0.5 h-4 w-4 shrink-0 text-brass-dark" />
-              <span>{siteConfig.contact.address}</span>
             </li>
           </ul>
         </div>

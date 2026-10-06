@@ -14,7 +14,6 @@ export const siteConfig = {
   contact: {
     email: 'bună@libraria.ro',
     phone: '+40 21 555 0123',
-    address: 'Str. Tipografilor nr. 12, București',
   },
 
   social: {

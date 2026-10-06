@@ -72,3 +72,21 @@ export function describeMailConfig() {
     port: Number(process.env.SMTP_PORT_LOCAL || 1025),
   }
 }
+
+/**
+ * The public base URL of the frontend, used to build clickable links in emails
+ * (e.g. the password-reset link). Configurable via `PUBLIC_URL`; falls back to
+ * the local Vite dev server so reset emails work out of the box in dev.
+ */
+export function getPublicUrl() {
+  return (process.env.PUBLIC_URL || 'http://localhost:5173').replace(/\/+$/, '')
+}
+
+/**
+ * The inbox that receives messages from the public contact form. Defaults to the
+ * same address the site sends from (SMTP_USER / MAIL_FROM_ADDRESS) — i.e. the
+ * mailbox configured in `.env`. Override with `CONTACT_TO`.
+ */
+export function getContactRecipient() {
+  return process.env.CONTACT_TO || process.env.SMTP_USER || process.env.MAIL_FROM_ADDRESS || null
+}

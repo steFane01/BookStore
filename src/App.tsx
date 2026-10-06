@@ -14,6 +14,7 @@ import Account from './pages/Account'
 import Admin from './pages/Admin'
 import About from './pages/About'
 import Contact from './pages/Contact'
+import ResetPassword from './pages/ResetPassword'
 
 /**
  * Scrolls to the top whenever the route changes. This keeps the fixed header
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="/comanda" element={<Checkout />} />
               <Route path="/comanda/:id" element={<OrderSuccess />} />
               <Route path="/autentificare" element={<Auth />} />
+              <Route path="/resetare-parola/:token" element={<ResetPassword />} />
               <Route path="/cont" element={<Account />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/despre" element={<About />} />
