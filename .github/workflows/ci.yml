@@ -15,6 +15,7 @@ on:
     branches: [main]    #   ... to the main branch
   pull_request:         # and on every pull request (any branch into main)
     branches: [main]
+  workflow_dispatch:    # also allow manual runs from the Actions tab
 
 # A workflow is made of "jobs". Each job runs in its own fresh VM.
 jobs:
