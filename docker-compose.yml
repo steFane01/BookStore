@@ -1,0 +1,84 @@
+# ---------------------------------------------------------------------------
+# Librăria — full stack
+#   db        PostgreSQL 16 (schema + seed auto-applied on first boot)
+#   backend   Node/Express template (reads from Postgres; endpoints stubbed)
+#   frontend  nginx serving the React build + SPA fallback + /api proxy
+#
+# Quick start:
+#   cp .env.example .env        # optional — defaults are inline below
+#   docker compose up --build
+#   open http://localhost:8080
+#
+# Inspect the database:
+#   docker compose exec db psql -U libraria -d libraria
+#   \dt
+# ---------------------------------------------------------------------------
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-libraria}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-libraria_dev_only}
+      POSTGRES_DB: ${POSTGRES_DB:-libraria}
+    ports:
+      # host:container — expose locally for a DB client (psql / pgAdmin / DBeaver)
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # Init scripts run once, in filename order, on an empty volume.
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-libraria} -d ${POSTGRES_DB:-libraria}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-libraria}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-libraria_dev_only}
+      PGDATABASE: ${POSTGRES_DB:-libraria}
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:-libraria-dev-secret-change-me}
+      # Mail transport — leave empty to use the local `mailpit` catch-all.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    expose:
+      - "4000"
+    restart: unless-stopped
+
+  # Local SMTP catch-all + web UI for viewing sent emails while testing without
+  # a real domain. UI at http://localhost:8025, SMTP on :1025.
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"   # web UI
+      - "1025:1025"   # SMTP
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:

@@ -1,0 +1,10 @@
+# Root .dockerignore — filters the build context sent to the frontend image.
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.local
+*.md
+.cline
+.dockerignore
