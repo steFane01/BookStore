@@ -83,9 +83,14 @@ The `backend/` image serves a real Express API backed by Postgres:
 - `GET  /api/mail/status`, `POST /api/mail/test` — mail diagnostics + test send
 - `POST /api/forms/contact` — email the contact-form message to the owner's mailbox
 - `POST /api/forms/newsletter` — email a newsletter confirmation to the subscriber
+- `POST /api/orders` — place an order: inserts `orders` + `order_lines` atomically,
+  returns the order with a unique registration number (`LB-YYYY-XXXXXX`) and emails
+  the exact delivery details to the owner's mailbox (for the courier partner)
+- `GET  /api/orders` — current user's orders (newest first)
+- `GET  /api/orders/all` — every order (admin only)
+- `GET  /api/orders/:id` — single order by id or reference (customer sees own, admin any)
 
-`/api/orders`, `/api/addresses`, `/api/cart` and `/api/users` remain stubbed (501)
-for a later pass.
+`/api/addresses`, `/api/cart` and `/api/users` remain stubbed (501) for a later pass.
 
 Demo accounts (seeded with real bcrypt hashes): `admin@libraria.ro / admin123`
 and `cititor@example.com / parola123`.

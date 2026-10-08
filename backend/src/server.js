@@ -6,6 +6,7 @@ import { healthRouter } from './routes/health.js'
 import { authRouter } from './routes/auth.js'
 import { mailRouter } from './routes/mail.js'
 import { formsRouter } from './routes/forms.js'
+import { ordersRouter } from './routes/orders.js'
 
 /**
  * Librăria backend.
@@ -27,8 +28,12 @@ import { formsRouter } from './routes/forms.js'
  *   GET/POST /api/mail/...                -> mail diagnostics + test send
  *   POST /api/forms/contact               -> email contact-form message to the owner
  *   POST /api/forms/newsletter            -> email a newsletter confirmation
+ *   POST /api/orders                      -> create an order (atomic ref) + email owner
+ *   GET  /api/orders                      -> current user's orders
+ *   GET  /api/orders/all                  -> all orders (admin)
+ *   GET  /api/orders/:id                  -> single order (id or reference)
  *
- * Orders, addresses, cart and users remain stubbed (501) for a later pass.
+ * Addresses, cart and users remain stubbed (501) for a later pass.
  */
 const app = express()
 app.use(cors())
@@ -39,11 +44,9 @@ app.use('/api/books', booksRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/mail', mailRouter)
 app.use('/api/forms', formsRouter)
+app.use('/api/orders', ordersRouter)
 
 // ---- Stub routers (not part of the current scope) ----
-app.use('/api/orders', async (_req, res) => {
-  res.status(501).json({ message: 'Order endpoints not implemented yet — template only.' })
-})
 app.use('/api/addresses', async (_req, res) => {
   res.status(501).json({ message: 'Address endpoints not implemented yet — template only.' })
 })

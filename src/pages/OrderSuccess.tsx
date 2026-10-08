@@ -59,9 +59,71 @@ export default function OrderSuccess() {
             align="center"
           />
           <p className="mx-auto mt-6 max-w-lg text-ink-muted">
-            Nu se percepe plata online. Vom procesa detaliile de livrare și vom
-            reveni cu confirmarea la adresa de email pe care ai furnizat-o.
+            Comanda ta a fost înregistrată cu succes. Nu se plătește nimic online —
+            detaliile de livrare au fost transmise echipei noastre, iar tu vei fi
+            contactat(ă) pentru a stabili livrarea.
           </p>
+        </div>
+
+        {/* Suggestive "what happens next" panel — reassures the user this is real. */}
+        <div className="mx-auto mt-10 max-w-4xl overflow-hidden rounded-lg border border-brass/30 bg-paper-50">
+          <div className="border-b border-brass/20 bg-brass/5 px-6 py-4">
+            <h3 className="font-serif text-xl text-ink">Ce se întâmplă mai departe?</h3>
+            <p className="mt-1 text-sm text-ink-muted">
+              Iată pașii pe care îi facem noi, în spate, pentru a-ți livra cărțile.
+            </p>
+          </div>
+          <ol className="divide-y divide-ink/10">
+            <li className="flex gap-4 px-6 py-4">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">
+                1
+              </span>
+              <div>
+                <p className="font-medium text-ink">Am primit comanda ta</p>
+                <p className="text-sm text-ink-muted">
+                  Datele tale de livrare au ajuns la echipa noastră, exact așa cum le-ai
+                  completat. Comanda are numărul de înregistrare{' '}
+                  <span className="font-semibold text-brass-dark">{order.reference}</span>.
+                </p>
+              </div>
+            </li>
+            <li className="flex gap-4 px-6 py-4">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">
+                2
+              </span>
+              <div>
+                <p className="font-medium text-ink">Pregătim livrarea cu partenerul nostru de curierat</p>
+                <p className="text-sm text-ink-muted">
+                  Lucrăm direct cu o firmă de curierat. Le transmitem exact adresa și
+                  datele de contact pe care le-ai furnizat, ca să ajungem la tine fără
+                  complicații.
+                </p>
+              </div>
+            </li>
+            <li className="flex gap-4 px-6 py-4">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">
+                3
+              </span>
+              <div>
+                <p className="font-medium text-ink">Te contactăm pentru livrare</p>
+                <p className="text-sm text-ink-muted">
+                  Vei fi sunat(ă) sau contactat(ă) pe email pentru a stabili data și
+                  detaliile livrării. Echipa noastră îți va confirma totul personal, înainte
+                  ca pachetul să plece.
+                </p>
+              </div>
+            </li>
+          </ol>
+          <div className="border-t border-ink/10 px-6 py-4">
+            <p className="text-sm text-ink-muted">
+              <span className="font-medium text-ink">Vrei să urmărești comanda?</span>{' '}
+              Intră în{' '}
+              <button onClick={() => navigate('/cont')} className="text-brass-dark underline underline-offset-2 hover:text-ink">
+                contul tău
+              </button>{' '}
+              la secțiunea „Comenzile mele” — o vei găsi acolo cu numărul de înregistrare.
+            </p>
+          </div>
         </div>
 
         <div className="mx-auto mt-12 grid max-w-4xl gap-8 md:grid-cols-[1fr_20rem] md:items-start">
