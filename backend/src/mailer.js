@@ -37,8 +37,30 @@ function getTransporter() {
   return transporter
 }
 
-const FROM =
-  process.env.MAIL_FROM || `Librăria <${process.env.MAIL_FROM_ADDRESS || 'no-reply@libraria.local'}>`
+const FROM = buildFrom()
+
+/**
+ * Resolve the `From` address used on outbound mail.
+ *
+ * Deliverability (especially to Yahoo / Gmail) hinges on the From domain
+ * *aligning* with the domain the SMTP account actually authenticates as — that's
+ * what SPF/DKIM/DMARC check. So when real SMTP is configured we default the From
+ * to the authenticated account address (`SMTP_USER`) rather than a fallback like
+ * `no-reply@libraria.local` that has no DNS records and would be rejected as a
+ * spoof. `MAIL_FROM` still overrides this explicitly.
+ */
+function buildFrom() {
+  if (process.env.MAIL_FROM) return process.env.MAIL_FROM
+  if (process.env.SMTP_HOST) {
+    const account = process.env.SMTP_USER
+    if (account) return `Librăria <${account}>`
+    // SMTP is configured but with no authenticated user — fall back to a
+    // best-effort friendly form (only useful with a relay that allows it).
+    return `Librăria <${process.env.MAIL_FROM_ADDRESS || 'no-reply@libraria.local'}>`
+  }
+  // Local mailpit — any From is fine, the address is not delivered anywhere.
+  return `Librăria <${process.env.MAIL_FROM_ADDRESS || 'no-reply@libraria.local'}>`
+}
 
 /**
  * Send an email. Returns the nodemailer info object. Throws on failure so

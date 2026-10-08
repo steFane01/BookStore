@@ -89,8 +89,12 @@ The `backend/` image serves a real Express API backed by Postgres:
 - `GET  /api/orders` — current user's orders (newest first)
 - `GET  /api/orders/all` — every order (admin only)
 - `GET  /api/orders/:id` — single order by id or reference (customer sees own, admin any)
+- `GET  /api/addresses` — current user's saved addresses
+- `POST /api/addresses` — save a new address for the current user
+- `PUT  /api/addresses/:id` — update one saved address
+- `DELETE /api/addresses/:id` — remove one saved address
 
-`/api/addresses`, `/api/cart` and `/api/users` remain stubbed (501) for a later pass.
+`/api/cart` and `/api/users` remain stubbed (501) for a later pass.
 
 Demo accounts (seeded with real bcrypt hashes): `admin@libraria.ro / admin123`
 and `cititor@example.com / parola123`.
@@ -135,6 +139,34 @@ then restart the backend (`docker compose up -d`). When `SMTP_HOST` is set, the
 backend uses it instead of Mailpit, and `POST /api/mail/test` will deliver to
 your real Gmail. When you later get a real domain for your site/mail, point
 these at your provider instead and set `SMTP_SECURE=true`.
+
+### Deliverability (Gmail → Yahoo / Gmail)
+
+A very common gotcha when sending from a Gmail account to **Yahoo** (or Gmail
+itself) is mail landing in **Spam** or bouncing with "DMARC / SPF / DKIM"
+warnings. This happens when the `From` address does **not** match the SMTP
+account the server authenticates as:
+
+- **Gmail** *requires* either SPF **or** DKIM to pass for the From domain.
+- **Yahoo** *requires* **both** SPF **and** DKIM to pass, with **DMARC alignment**
+  (the From domain must equal — or be a subdomain of — the domain that signed DKIM
+  and that publishes SPF).
+
+Since the app relays through your own Gmail account, Gmail already signs and
+aligns every message it sends **for `@gmail.com` addresses**. The rule is
+therefore:
+
+- **Keep `MAIL_FROM` on your Gmail address** — e.g. `Librăria <you@gmail.com>`.
+  The backend now **defaults `From` to `SMTP_USER`** when SMTP is active and
+  `MAIL_FROM` is unset, precisely so the From stays aligned and Yahoo/Gmail don't
+  discard the mail. **Never** set it to a bare domain like `no-reply@libraria.local`
+  — that domain has no DNS records, so SPF/DKIM always fail and Yahoo rejects it.
+- Don't email the same unrestricted recipients too aggressively from a free Gmail
+  address; Gmail enforces per-day sending limits.
+- For a production store, sign up for a real domain + a transactional provider
+  (SendGrid, Postmark, Amazon SES, …) and add the SPF/DKIM DNS records that
+  provider gives you — then point `SMTP_HOST`/`MAIL_FROM` at it. That is the only
+  durable fix for high-volume or brand-domain sending.
 
 ### Notes
 

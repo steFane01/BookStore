@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { CustomerAddress, OrderDraft } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { orderService } from '../services/orderService'
+import { addressService } from '../services/addressService'
 import { FormField } from '../components/FormField'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
@@ -36,6 +37,18 @@ export default function Account() {
     let active = true
     orderService.getOrders(user.id).then((data) => {
       if (active) setOrders(data)
+    })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) return
+    let active = true
+    addressService.list(user.id).then((data) => {
+      if (active) setAddresses(data)
     })
     return () => {
       active = false
@@ -103,6 +116,7 @@ export default function Account() {
           )}
           {tab === 'addresses' && (
             <AddressesTab
+              userId={user.id}
               addresses={addresses}
               setAddresses={setAddresses}
             />
@@ -172,13 +186,18 @@ function ProfileTab({
 
 
 function AddressesTab({
+  userId,
   addresses,
   setAddresses,
 }: {
+  userId: string
   addresses: CustomerAddress[]
   setAddresses: React.Dispatch<React.SetStateAction<CustomerAddress[]>>
 }) {
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
   const [label, setLabel] = useState('')
   const [recipient, setRecipient] = useState('')
   const [phone, setPhone] = useState('')
@@ -186,17 +205,14 @@ function AddressesTab({
   const [locality, setLocality] = useState('')
   const [street, setStreet] = useState('')
   const [number, setNumber] = useState('')
+  const [block, setBlock] = useState('')
+  const [staircase, setStaircase] = useState('')
+  const [floor, setFloor] = useState('')
+  const [apartment, setApartment] = useState('')
+  const [postalCode, setPostalCode] = useState('')
 
-  const addAddress = () => {
-    const item: CustomerAddress = {
-      id: `addr-${Date.now()}`,
-      label: label.trim() || recipient.trim() || 'Adresă',
-      recipient: recipient.trim(),
-      phone: phone.trim(),
-      address: { county, locality, street, number },
-    }
-    setAddresses((prev) => [...prev, item])
-    setShowForm(false)
+  const resetForm = () => {
+    setEditingId(null)
     setLabel('')
     setRecipient('')
     setPhone('')
@@ -204,10 +220,79 @@ function AddressesTab({
     setLocality('')
     setStreet('')
     setNumber('')
+    setBlock('')
+    setStaircase('')
+    setFloor('')
+    setApartment('')
+    setPostalCode('')
   }
 
-  const removeAddress = (id: string) => {
+  const startEdit = (a: CustomerAddress) => {
+    setEditingId(a.id)
+    setLabel(a.label)
+    setRecipient(a.recipient)
+    setPhone(a.phone)
+    setCounty(a.address.county)
+    setLocality(a.address.locality)
+    setStreet(a.address.street)
+    setNumber(a.address.number)
+    setBlock(a.address.block ?? '')
+    setStaircase(a.address.staircase ?? '')
+    setFloor(a.address.floor ?? '')
+    setApartment(a.address.apartment ?? '')
+    setPostalCode(a.address.postalCode ?? '')
+    setShowForm(true)
+  }
+
+  const formData = () => {
+    const data: Parameters<typeof addressService.create>[1] = {
+      label: label ? label.trim() : undefined,
+      recipient: recipient.trim(),
+      phone: phone.trim(),
+      address: {
+        county,
+        locality,
+        street,
+        number,
+        block: block || undefined,
+        staircase: staircase || undefined,
+        floor: floor || undefined,
+        apartment: apartment || undefined,
+        postalCode: postalCode || undefined,
+      },
+    }
+    return data
+  }
+
+  const saveAddress = async () => {
+    if (!recipient.trim() || !county.trim() || !locality.trim() || !street.trim() || !number.trim()) {
+      return
+    }
+    setBusy(true)
+    try {
+      if (editingId) {
+        const updated = await addressService.update(userId, editingId, formData())
+        setAddresses((prev) => prev.map((a) => (a.id === editingId ? updated : a)))
+      } else {
+        const created = await addressService.create(userId, formData())
+        setAddresses((prev) => [...prev, created])
+      }
+      setShowForm(false)
+      resetForm()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeAddress = async (id: string) => {
+    const previous = addresses
     setAddresses((prev) => prev.filter((a) => a.id !== id))
+    try {
+      await addressService.remove(userId, id)
+    } catch (err) {
+      setAddresses(previous)
+      alert(err instanceof Error ? err.message : 'Nu am putut șterge adresa.')
+    }
   }
 
   return (
@@ -216,7 +301,15 @@ function AddressesTab({
         <p className="text-sm text-ink-muted">Adrese salvate pentru livrări mai rapide.</p>
         <button
           type="button"
-          onClick={() => setShowForm((s) => !s)}
+          onClick={() => {
+            if (showForm) {
+              setShowForm(false)
+              resetForm()
+            } else {
+              resetForm()
+              setShowForm(true)
+            }
+          }}
           className="btn btn-outline px-4 py-2 text-sm"
         >
           {showForm ? 'Anulează' : '+ Adaugă adresă'}
@@ -248,9 +341,29 @@ function AddressesTab({
               <input id="addr-number" className="field" value={number} onChange={(e) => setNumber(e.target.value)} />
             </FormField>
           </div>
+          <FormField label="Bloc" htmlFor="addr-block">
+            <input id="addr-block" className="field" value={block} onChange={(e) => setBlock(e.target.value)} />
+          </FormField>
+          <FormField label="Scară" htmlFor="addr-staircase">
+            <input id="addr-staircase" className="field" value={staircase} onChange={(e) => setStaircase(e.target.value)} />
+          </FormField>
+          <FormField label="Etaj" htmlFor="addr-floor">
+            <input id="addr-floor" className="field" value={floor} onChange={(e) => setFloor(e.target.value)} />
+          </FormField>
+          <FormField label="Apartament" htmlFor="addr-apartment">
+            <input id="addr-apartment" className="field" value={apartment} onChange={(e) => setApartment(e.target.value)} />
+          </FormField>
+          <FormField label="Cod poștal" htmlFor="addr-postal">
+            <input id="addr-postal" className="field" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} />
+          </FormField>
           <div className="sm:col-span-2">
-            <button type="button" onClick={addAddress} className="btn btn-primary w-full px-6 py-3">
-              Salvează adresa
+            <button
+              type="button"
+              onClick={saveAddress}
+              disabled={busy}
+              className="btn btn-primary w-full px-6 py-3 disabled:opacity-60"
+            >
+              {busy ? 'Se salvează…' : editingId ? 'Salvează modificările' : 'Salvează adresa'}
             </button>
           </div>
         </div>
@@ -258,7 +371,7 @@ function AddressesTab({
 
       {addresses.length === 0 ? (
         <p className="mt-8 text-sm text-ink-muted">
-          Nu ai încă adrese salvate. (Acestea sunt doar pentru demonstrație.)
+          Nu ai încă adrese salvate. Adaugă-ți adresa preferată pentru o livrare mai rapidă.
         </p>
       ) : (
         <ul className="mt-6 divide-y divide-ink/10 border border-ink/10">
@@ -268,16 +381,29 @@ function AddressesTab({
                 <p className="font-medium">{a.label}</p>
                 <p>{a.recipient}</p>
                 <p className="text-ink-muted">
-                  {a.address.street} nr. {a.address.number}, {a.address.locality}, {a.address.county}
+                  {a.address.street} nr. {a.address.number}
+                  {a.address.block ? `, Bl. ${a.address.block}` : ''}
+                  {a.address.apartment ? `, Ap. ${a.address.apartment}` : ''},{' '}
+                  {a.address.locality}, {a.address.county}
+                  {a.address.postalCode ? `, ${a.address.postalCode}` : ''}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => removeAddress(a.id)}
-                className="text-sm text-oxblood underline-offset-2 hover:underline"
-              >
-                Șterge
-              </button>
+              <div className="flex shrink-0 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => startEdit(a)}
+                  className="text-sm text-ink-muted underline-offset-2 hover:text-ink hover:underline"
+                >
+                  Editează
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeAddress(a.id)}
+                  className="text-sm text-oxblood underline-offset-2 hover:underline"
+                >
+                  Șterge
+                </button>
+              </div>
             </li>
           ))}
         </ul>

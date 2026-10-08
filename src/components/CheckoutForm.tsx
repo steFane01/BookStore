@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import type { CartItem } from '../types'
+import { useEffect, useState } from 'react'
+import type { CartItem, CustomerAddress } from '../types'
 import { FormField } from './FormField'
 import { orderService } from '../services/orderService'
+import { addressService } from '../services/addressService'
 
 export interface CheckoutValues {
   fullName: string
@@ -52,12 +53,49 @@ export function CheckoutForm({ items, userId, onSuccess, onError }: CheckoutForm
   const [values, setValues] = useState<CheckoutValues>(empty)
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutValues, string>>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([])
+  const [selectedAddress, setSelectedAddress] = useState('')
+
+  // Load the logged-in user's saved addresses so they can be offered as a quick
+  // fill for the shipping form.
+  useEffect(() => {
+    if (!userId) return
+    let active = true
+    addressService.list(userId).then((data) => {
+      if (active) setSavedAddresses(data)
+    })
+    return () => {
+      active = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   const set = <K extends keyof CheckoutValues>(key: K, value: CheckoutValues[K]) => {
     setValues((v) => ({ ...v, [key]: value }))
     if (errors[key]) {
       setErrors((e) => ({ ...e, [key]: undefined }))
     }
+  }
+
+  /** Fill the shipping/contact fields from a saved address. */
+  const applyAddress = (id: string) => {
+    setSelectedAddress(id)
+    const a = savedAddresses.find((x) => x.id === id)
+    if (!a) return
+    setValues((v) => ({
+      ...v,
+      fullName: v.fullName || a.recipient,
+      phone: v.phone || a.phone,
+      county: a.address.county,
+      locality: a.address.locality,
+      street: a.address.street,
+      number: a.address.number,
+      block: a.address.block ?? '',
+      staircase: a.address.staircase ?? '',
+      floor: a.address.floor ?? '',
+      apartment: a.address.apartment ?? '',
+      postalCode: a.address.postalCode ?? '',
+    }))
   }
 
   const validate = (): boolean => {
@@ -109,6 +147,30 @@ export function CheckoutForm({ items, userId, onSuccess, onError }: CheckoutForm
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-8">
+      {savedAddresses.length > 0 && (
+        <fieldset className="flex flex-col gap-2 border border-ink/10 bg-paper-50 px-5 py-4">
+          <label htmlFor="saved-address" className="text-sm font-medium text-ink">
+            Folosește o adresă salvată
+          </label>
+          <select
+            id="saved-address"
+            className="field"
+            value={selectedAddress}
+            onChange={(e) => applyAddress(e.target.value)}
+          >
+            <option value="">— alege o adresă —</option>
+            {savedAddresses.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label} — {a.address.street} nr. {a.address.number}, {a.address.locality}, {a.address.county}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-ink-muted">
+            Selectează o adresă pentru a completa automat câmpurile de livrare.
+          </p>
+        </fieldset>
+      )}
+
       {/* Date personale */}
       <Section title="Date de contact">
         <div className="grid gap-4 sm:grid-cols-2">

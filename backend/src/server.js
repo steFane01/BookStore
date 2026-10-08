@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.js'
 import { mailRouter } from './routes/mail.js'
 import { formsRouter } from './routes/forms.js'
 import { ordersRouter } from './routes/orders.js'
+import { addressesRouter } from './routes/addresses.js'
 
 /**
  * Librăria backend.
@@ -32,8 +33,10 @@ import { ordersRouter } from './routes/orders.js'
  *   GET  /api/orders                      -> current user's orders
  *   GET  /api/orders/all                  -> all orders (admin)
  *   GET  /api/orders/:id                  -> single order (id or reference)
+ *   GET/POST /api/addresses               -> list / save current user's addresses
+ *   PUT/DELETE /api/addresses/:id         -> update / remove one saved address
  *
- * Addresses, cart and users remain stubbed (501) for a later pass.
+ * Cart and users remain stubbed (501) for a later pass.
  */
 const app = express()
 app.use(cors())
@@ -45,11 +48,9 @@ app.use('/api/auth', authRouter)
 app.use('/api/mail', mailRouter)
 app.use('/api/forms', formsRouter)
 app.use('/api/orders', ordersRouter)
+app.use('/api/addresses', addressesRouter)
 
 // ---- Stub routers (not part of the current scope) ----
-app.use('/api/addresses', async (_req, res) => {
-  res.status(501).json({ message: 'Address endpoints not implemented yet — template only.' })
-})
 app.use('/api/cart', async (_req, res) => {
   res.status(501).json({ message: 'Cart endpoints not implemented yet — template only.' })
 })
