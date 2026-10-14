@@ -152,8 +152,18 @@ export default function OrderSuccess() {
             </ul>
             <div className="border-t border-ink/10 px-6 py-5">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-ink-muted">Total de plată</span>
-                <span className="font-serif text-2xl text-ink">{formatPrice(order.subtotal)}</span>
+                <span className="text-sm text-ink-muted">Subtotal</span>
+                <span className="font-serif text-lg text-ink">{formatPrice(order.subtotal)}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-sm text-ink-muted">
+                  {order.deliveryMethod === 'easybox' ? 'Livrare EasyBox' : 'Livrare curier'}
+                </span>
+                <span className="font-serif text-lg text-ink">{formatPrice(order.shippingCost ?? 0)}</span>
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-ink/10 pt-3">
+                <span className="text-sm font-medium text-ink">Total de plată</span>
+                <span className="font-serif text-2xl text-ink">{formatPrice(order.total ?? order.subtotal)}</span>
               </div>
             </div>
           </div>
@@ -161,19 +171,31 @@ export default function OrderSuccess() {
           {/* Delivery */}
           <div className="border border-ink/10 bg-paper-50">
             <h3 className="border-b border-ink/10 px-6 py-4 font-serif text-xl text-ink">
-              Livrare către
+              {order.deliveryMethod === 'easybox' ? 'Livrare EasyBox' : 'Livrare către'}
             </h3>
             <div className="px-6 py-5 text-sm leading-relaxed text-ink">
-              <p className="font-medium text-ink">{order.shipping.fullName}</p>
-              <p>{order.shipping.street} nr. {order.shipping.number}
-                {order.shipping.block ? `, Bl. ${order.shipping.block}` : ''}
-                {order.shipping.apartment ? `, Ap. ${order.shipping.apartment}` : ''}
-              </p>
-              <p>
-                {order.shipping.locality}, {order.shipping.county}
-              </p>
-              <p className="mt-3">{order.shipping.email}</p>
-              <p>{order.shipping.phone}</p>
+              {order.deliveryMethod === 'easybox' && order.easybox ? (
+                <>
+                  <p className="font-medium text-ink">{order.shipping.fullName}</p>
+                  <p className="mt-2 font-medium text-ink">{order.easybox.name}</p>
+                  <p>{order.easybox.address}</p>
+                  <p className="mt-3">{order.shipping.email}</p>
+                  <p>{order.shipping.phone}</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-medium text-ink">{order.shipping.fullName}</p>
+                  <p>{order.shipping.street} nr. {order.shipping.number}
+                    {order.shipping.block ? `, Bl. ${order.shipping.block}` : ''}
+                    {order.shipping.apartment ? `, Ap. ${order.shipping.apartment}` : ''}
+                  </p>
+                  <p>
+                    {order.shipping.locality}, {order.shipping.county}
+                  </p>
+                  <p className="mt-3">{order.shipping.email}</p>
+                  <p>{order.shipping.phone}</p>
+                </>
+              )}
             </div>
             <div className="border-t border-ink/10 px-6 py-4">
               <p className="text-xs leading-relaxed text-ink-muted">

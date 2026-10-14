@@ -99,6 +99,12 @@ CREATE TABLE orders (
     user_id     UUID REFERENCES users (id) ON DELETE SET NULL,
     status      order_status NOT NULL DEFAULT 'pending',
     subtotal    NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (subtotal >= 0),
+    -- delivery: 'courier' (acasă, prin SameDay) or 'easybox' (pickup point)
+    delivery_method  TEXT NOT NULL DEFAULT 'courier',
+    easybox_name     TEXT,
+    easybox_address  TEXT,
+    shipping_cost    NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (shipping_cost >= 0),
+    total            NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (total >= 0),
     -- No online payment by design (frontend states this explicitly). Column
     -- reserved for a future payment provider payload.
     payment     JSONB,

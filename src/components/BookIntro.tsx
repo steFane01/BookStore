@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { siteConfig } from '../config/site'
-import { BookCover } from './BookCover'
-import type { Book } from '../types'
+import { BrandLogo } from './BrandLogo'
 
 interface BookIntroProps {
-  book: Book
   onEnter: () => void
 }
 
@@ -17,7 +15,7 @@ const SESSION_KEY = 'libraria.intro-seen'
  * the CTA triggers a brief "opening a book" transition, then the store appears.
  * The intro only plays once per session (sessionStorage).
  */
-export function BookIntro({ book, onEnter }: BookIntroProps) {
+export function BookIntro({ onEnter }: BookIntroProps) {
   const [phase, setPhase] = useState<'cover' | 'opening' | 'hidden'>('cover')
   const [textPhase, setTextPhase] = useState(false)
   const timerRef = useRef<number | null>(null)
@@ -80,17 +78,12 @@ export function BookIntro({ book, onEnter }: BookIntroProps) {
           {siteConfig.brandName}
         </span>
 
-        {/* Book cover-ish block */}
+        {/* Brand logo — placeholder (no book cover on the welcome screen) */}
         <div
           className={`mt-8 transition-all duration-1000 ease-out ${textPhase ? 'translate-y-0 opacity-100' : 'translate-y-6 opacity-0'}`}
           style={{ transitionDelay: reducedMotion ? '0ms' : '200ms' }}
         >
-          <BookCover
-            book={book}
-            dimensional
-            size="lg"
-            className="aspect-[2/3] w-48 sm:w-56 md:w-64"
-          />
+          <BrandLogo light className="h-32 w-32 sm:h-40 sm:w-40" />
         </div>
 
         {/* Tagline */}

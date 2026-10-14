@@ -318,11 +318,17 @@ function OrdersTab({ orders }: { orders: OrderDraft[] }) {
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <span className="font-serif text-lg text-ink">{formatPrice(o.subtotal)}</span>
+                <span className="font-serif text-lg text-ink">{formatPrice(o.total ?? o.subtotal)}</span>
                 <span className="rounded-full border border-ink/15 px-3 py-1 text-xs uppercase tracking-wider text-ink-muted">
                   {orderStatusLabels[o.status]}
                 </span>
               </div>
+            </div>
+            <div className="mt-2 text-xs text-ink-muted">
+              {o.deliveryMethod === 'easybox'
+                ? `Livrare EasyBox — ${o.easybox?.name ?? '—'}`
+                : 'Livrare curier (acasă)'}
+              {o.shippingCost != null && ` · ${formatPrice(o.shippingCost)} livrare`}
             </div>
             <ul className="mt-3 space-y-1 border-t border-ink/10 pt-3 text-sm text-ink-light">
               {o.lines.map((line) => (

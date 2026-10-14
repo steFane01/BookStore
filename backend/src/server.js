@@ -1,6 +1,8 @@
+import path from 'node:path'
+import fs from 'node:fs'
 import express from 'express'
 import cors from 'cors'
-import { pingDatabase } from './db.js'
+import { pingDatabase, ensureSchema } from './db.js'
 import { booksRouter } from './routes/books.js'
 import { healthRouter } from './routes/health.js'
 import { authRouter } from './routes/auth.js'
@@ -8,6 +10,8 @@ import { mailRouter } from './routes/mail.js'
 import { formsRouter } from './routes/forms.js'
 import { ordersRouter } from './routes/orders.js'
 import { addressesRouter } from './routes/addresses.js'
+import { uploadRouter } from './routes/upload.js'
+import { easyboxesRouter } from './routes/easyboxes.js'
 
 /**
  * Librăria backend.
@@ -35,6 +39,10 @@ import { addressesRouter } from './routes/addresses.js'
  *   GET  /api/orders/:id                  -> single order (id or reference)
  *   GET/POST /api/addresses               -> list / save current user's addresses
  *   PUT/DELETE /api/addresses/:id         -> update / remove one saved address
+ *   POST /api/upload                      -> admin image upload (cover / gallery)
+ *
+ * Uploaded images are stored under the `uploads/` directory and served at
+ * `/uploads/...`.
  *
  * Cart and users remain stubbed (501) for a later pass.
  */
@@ -49,6 +57,15 @@ app.use('/api/mail', mailRouter)
 app.use('/api/forms', formsRouter)
 app.use('/api/orders', ordersRouter)
 app.use('/api/addresses', addressesRouter)
+app.use('/api/upload', uploadRouter)
+app.use('/api/easyboxes', easyboxesRouter)
+
+// Serve admin-uploaded book images (covers + gallery). The directory is created
+// eagerly by upload.js, but we make sure it exists here too so a fresh container
+// that has never processed an upload still serves an existing volume.
+const uploadsDir = process.env.UPLOAD_DIR || path.resolve(process.cwd(), 'uploads')
+fs.mkdirSync(uploadsDir, { recursive: true })
+app.use('/uploads', express.static(uploadsDir))
 
 // ---- Stub routers (not part of the current scope) ----
 app.use('/api/cart', async (_req, res) => {
@@ -59,13 +76,29 @@ app.use('/api/users', async (_req, res) => {
 })
 
 // Warm-up check so a broken DB config fails fast at startup.
-app.locals.ready = pingDatabase().catch((err) => {
-  console.error('[libraria] DB ping failed at startup:', err.message)
-  return null
-})
+app.locals.ready = (async () => {
+  try {
+    // Self-healing schema: creates missing tables and bumps stale volumes with
+    // any missing columns (delivery_method, easybox_*, shipping_cost, total…)
+    // so checkout INSERTs never hit a "column does not exist" error, no matter
+    // how old the `db_data` volume is. Idempotent — safe on every boot.
+    await ensureSchema()
+    const info = await pingDatabase()
+    console.log(`[libraria] DB ready (${info.db} @ ${info.user})`)
+    return info
+  } catch (err) {
+    console.error('[libraria] DB ping failed at startup:', err.message)
+    return null
+  }
+})()
 
 const PORT = Number(process.env.PORT || 4000)
-app.listen(PORT, () => {
-  console.log(`[libraria] backend listening on :${PORT}`)
-})
+
+// Only start accepting traffic once the schema is guaranteed to be in place.
+app.locals.ready
+  .then(() => app.listen(PORT))
+  .catch((err) => {
+    console.error('[libraria] failed to start:', err.message)
+    process.exit(1)
+  })
 

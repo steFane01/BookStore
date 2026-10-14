@@ -98,12 +98,34 @@ export interface OrderLine {
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
 
+/** How an order is delivered (SameDay courier home, or EasyBox pickup point). */
+export type DeliveryMethod = 'courier' | 'easybox'
+
+export interface EasyBox {
+  id: string
+  city: string
+  name: string
+  address: string
+  /** WGS84 coordinates, used to plot the EasyBox on the checkout map. Optional —
+   * the SameDay live API provides them; the bundled demo list carries
+   * approximate ones. Guard on the frontend for boxes without coordinates. */
+  lat?: number
+  lng?: number
+}
+
 export interface OrderDraft {
   id: string
   reference: string
   lines: OrderLine[]
   shipping: ShippingAddress
   subtotal: number
+  /** Shipping fee (RON) for the chosen delivery method. */
+  shippingCost: number
+  /** Grand total = subtotal + shippingCost. */
+  total: number
+  deliveryMethod: DeliveryMethod
+  /** The chosen SameDay EasyBox (present only when deliveryMethod === 'easybox'). */
+  easybox?: { name: string; address: string }
   /** No online payment — this stays null by design in this frontend-only build. */
   payment: null
   status: OrderStatus

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { CartItem, CustomerAddress } from '../types'
+import type { CartItem, CustomerAddress, DeliveryMethod, EasyBox } from '../types'
 import { FormField } from './FormField'
 import { orderService } from '../services/orderService'
 import { addressService } from '../services/addressService'
+import { easyboxService } from '../services/easyboxService'
+import { EasyBoxMap } from './EasyBoxMap'
 
 export interface CheckoutValues {
   fullName: string
@@ -25,6 +27,9 @@ export interface CheckoutValues {
 interface CheckoutFormProps {
   items: CartItem[]
   userId?: string
+  /** Selected delivery method (controlled by the checkout page). */
+  deliveryMethod: DeliveryMethod
+  onDeliveryMethodChange: (method: DeliveryMethod) => void
   onSuccess: (orderId: string) => void
   onError: (message: string) => void
 }
@@ -49,12 +54,44 @@ const empty: CheckoutValues = {
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export function CheckoutForm({ items, userId, onSuccess, onError }: CheckoutFormProps) {
+export function CheckoutForm({
+  items,
+  userId,
+  deliveryMethod,
+  onDeliveryMethodChange,
+  onSuccess,
+  onError,
+}: CheckoutFormProps) {
   const [values, setValues] = useState<CheckoutValues>(empty)
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutValues, string>>>({})
   const [submitting, setSubmitting] = useState(false)
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([])
   const [selectedAddress, setSelectedAddress] = useState('')
+  const [easyboxId, setEasyboxId] = useState('')
+  const [easyboxes, setEasyboxes] = useState<EasyBox[]>([])
+  const [easyboxesLoading, setEasyboxesLoading] = useState(true)
+  const easybox = easyboxes.find((e) => e.id === easyboxId) ?? null
+  const shippingFee = orderService.shippingFeeFor(deliveryMethod)
+
+  // Load the SameDay EasyBox pickup points from the backend proxy (which talks
+  // to the live SameDay API when configured, or serves the bundled demo list).
+  useEffect(() => {
+    let active = true
+    easyboxService
+      .getLockers()
+      .then(({ boxes }) => {
+        if (active) setEasyboxes(boxes)
+      })
+      .catch(() => {
+        if (active) setEasyboxes([])
+      })
+      .finally(() => {
+        if (active) setEasyboxesLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Load the logged-in user's saved addresses so they can be offered as a quick
   // fill for the shipping form.
@@ -103,10 +140,16 @@ export function CheckoutForm({ items, userId, onSuccess, onError }: CheckoutForm
     if (values.fullName.trim().length < 3) e.fullName = 'Te rugăm să introduci numele complet.'
     if (!emailRe.test(values.email.trim())) e.email = 'Adresa de email nu este validă.'
     if (values.phone.trim().length < 8) e.phone = 'Introdu un număr de telefon valid.'
-    if (!values.county.trim()) e.county = 'Județul este obligatoriu.'
-    if (!values.locality.trim()) e.locality = 'Localitatea este obligatorie.'
-    if (!values.street.trim()) e.street = 'Strada este obligatorie.'
-    if (!values.number.trim()) e.number = 'Numărul este obligatoriu.'
+    if (deliveryMethod === 'easybox') {
+      if (!easybox) {
+        e.county = 'Alege un EasyBox SameDay pentru livrare.'
+      }
+    } else {
+      if (!values.county.trim()) e.county = 'Județul este obligatoriu.'
+      if (!values.locality.trim()) e.locality = 'Localitatea este obligatorie.'
+      if (!values.street.trim()) e.street = 'Strada este obligatorie.'
+      if (!values.number.trim()) e.number = 'Numărul este obligatoriu.'
+    }
     if (!values.acceptTerms) e.acceptTerms = 'Trebuie să accepți termenii și condițiile.'
     if (!values.acceptPrivacy) e.acceptPrivacy = 'Trebuie să accepți politica de confidențialitate.'
     setErrors(e)
@@ -136,6 +179,11 @@ export function CheckoutForm({ items, userId, onSuccess, onError }: CheckoutForm
           notes: values.notes || undefined,
         },
         userId,
+        {
+          deliveryMethod,
+          easyboxId: deliveryMethod === 'easybox' ? easyboxId : undefined,
+          shippingCost: shippingFee,
+        },
       )
       onSuccess(draft.id)
     } catch (err) {
@@ -208,8 +256,82 @@ export function CheckoutForm({ items, userId, onSuccess, onError }: CheckoutForm
         </div>
       </Section>
 
-      {/* Adresă de livrare */}
-      <Section title="Adresa de livrare">
+      {/* Metoda de livrare */}
+      <Section title="Metoda de livrare">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onDeliveryMethodChange('courier')}
+            aria-pressed={deliveryMethod === 'courier'}
+            className={`flex flex-col gap-1 border p-4 text-left transition-colors ${
+              deliveryMethod === 'courier' ? 'border-[#642A2E] bg-[#642A2E]/5' : 'border-ink/15 hover:border-ink/40'
+            }`}
+          >
+            <span className="font-semibold text-ink">Curier (acasă)</span>
+            <span className="text-sm text-ink-muted">Livrare SameDay la adresa ta: {orderService.shippingFeeFor('courier')} lei</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onDeliveryMethodChange('easybox')}
+            aria-pressed={deliveryMethod === 'easybox'}
+            className={`flex flex-col gap-1 border p-4 text-left transition-colors ${
+              deliveryMethod === 'easybox' ? 'border-[#642A2E] bg-[#642A2E]/5' : 'border-ink/15 hover:border-ink/40'
+            }`}
+          >
+            <span className="font-semibold text-ink">EasyBox (punct de preluare)</span>
+            <span className="text-sm text-ink-muted">Ridicare SameDay dintr-un EasyBox: {orderService.shippingFeeFor('easybox')} lei</span>
+          </button>
+        </div>
+
+        {deliveryMethod === 'easybox' && (
+          <>
+          <FormField label="Alege punctul EasyBox" htmlFor="easybox" required error={errors.county}>
+            <select
+              id="easybox"
+              className={`field ${errors.county ? 'field-error' : ''}`}
+              value={easyboxId}
+              onChange={(e) => setEasyboxId(e.target.value)}
+            >
+              <option value="">— alege un EasyBox —</option>
+              {easyboxesLoading ? (
+                <option disabled>Se încarcă punctele EasyBox…</option>
+              ) : (
+                easyboxes.map((eb) => (
+                  <option key={eb.id} value={eb.id}>
+                    {eb.name} — {eb.address}
+                  </option>
+                ))
+              )}
+            </select>
+            {easyboxesLoading ? (
+              <p className="mt-1 text-xs text-ink-muted">Se încarcă punctele de preluare…</p>
+            ) : easybox ? (
+              <p className="mt-1 text-xs text-ink-muted">
+                Livrare la: <span className="font-medium text-ink">{easybox.name}</span> — {easybox.address}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-ink-muted">
+                Selectează punctul de preluare SameDay preferat.
+              </p>
+            )}
+          </FormField>
+
+          {/* Harta punctelor EasyBox pe teritoriul României. */}
+          {!easyboxesLoading && (
+            <EasyBoxMap
+              boxes={easyboxes}
+              selectedId={easyboxId}
+              onSelect={setEasyboxId}
+              loading={easyboxesLoading}
+            />
+          )}
+          </>
+        )}
+      </Section>
+
+      {/* Adresă de livrare (doar pentru curier) */}
+      {deliveryMethod === 'courier' && (
+        <Section title="Adresa de livrare">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Județ" htmlFor="county" required error={errors.county}>
             <input
@@ -295,7 +417,8 @@ export function CheckoutForm({ items, userId, onSuccess, onError }: CheckoutForm
             </FormField>
           </div>
         </div>
-      </Section>
+        </Section>
+      )}
 
       {/* Payment notice */}
       <div className="border border-brass/40 bg-brass/5 px-6 py-5">

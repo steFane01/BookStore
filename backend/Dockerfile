@@ -14,10 +14,15 @@ COPY src ./src
 
 # Run as non-root for security
 RUN addgroup -S app && adduser -S app -G app
+
+# Uploads dir — writable by the non-root `app` user so admin image uploads work.
+RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
+
 USER app
 
 ENV NODE_ENV=production
 ENV PORT=4000
+ENV UPLOAD_DIR=/app/uploads
 
 EXPOSE 4000
 

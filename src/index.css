@@ -191,6 +191,13 @@
   .text-balance {
     text-wrap: balance;
   }
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
   .mask-b {
     -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
     mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
@@ -267,3 +274,33 @@
 .animate-slide-up {
   animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* ---------------------------------------------------------------------------
+ * SameDay EasyBox map (Leaflet) — custom marker dots matching the brand.
+ * ------------------------------------------------------------------------- */
+.leaflet-container {
+  font-family: var(--font-sans);
+}
+
+.libraria-marker {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0 auto;
+  border-radius: 9999px;
+  background: #642a2e;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease;
+}
+
+.libraria-marker:hover {
+  transform: scale(1.15);
+}
+
+.libraria-marker--active {
+  background: #a88755;
+  transform: scale(1.25);
+  box-shadow: 0 0 0 3px rgba(168, 135, 85, 0.35), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+

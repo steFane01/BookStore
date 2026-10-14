@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import type { Book } from '../types'
 import { bookService } from '../services/bookService'
 import { BookIntro } from '../components/BookIntro'
-import { BookHero } from '../components/BookHero'
+import { HomeBanner } from '../components/HomeBanner'
+import { CoversStrip } from '../components/CoversStrip'
 import { SectionHeading } from '../components/SectionHeading'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { BookGrid } from '../components/BookGrid'
@@ -13,7 +14,6 @@ const INTRO_SESSION_KEY = 'libraria.intro-seen'
 
 export default function Home() {
   const [books, setBooks] = useState<Book[]>([])
-  const [featured, setFeatured] = useState<Book | null>(null)
   const [loading, setLoading] = useState(true)
   const [showIntro, setShowIntro] = useState(false)
 
@@ -24,7 +24,6 @@ export default function Home() {
         const data = await bookService.getBooks()
         if (!active) return
         setBooks(data)
-        setFeatured(data.find((b) => b.featured) ?? data[0] ?? null)
       } finally {
         if (active) setLoading(false)
       }
@@ -62,17 +61,13 @@ export default function Home() {
 
   return (
     <>
-      {showIntro && featured && (
-        <BookIntro book={featured} onEnter={handleEnter} />
-      )}
+      {showIntro && <BookIntro onEnter={handleEnter} />}
 
-      {featured ? (
-        <BookHero book={featured} />
-      ) : (
-        <p className="container-page py-32 text-center text-ink-muted">
-          Momentan nu există cărți publicate.
-        </p>
-      )}
+      {/* Brand banner — horizontally scrollable */}
+      <HomeBanner />
+
+      {/* Lateral cover strip — only covers, no details */}
+      <CoversStrip books={books} />
 
       {/* Philosophy statement */}
       <AnimatedSection className="container-page py-20 md:py-28">
@@ -90,39 +85,8 @@ export default function Home() {
         </div>
       </AnimatedSection>
 
-      {/* Featured book composition */}
-      {featured && (
-        <AnimatedSection className="border-y border-ink/10 bg-paper-200/50 py-20 md:py-28">
-          <div className="container-page">
-            <SectionHeading
-              eyebrow="Ediția care ne definește"
-              title={featured.title}
-              description={featured.shortDescription}
-            />
-            <div className="mt-10 grid gap-10 md:grid-cols-2 md:items-center">
-              <blockquote className="font-serif text-2xl italic leading-relaxed text-ink sm:text-3xl">
-                „Unele cărți cer o anumită tăcere înainte de a-ți îngădui primul
-                cuvânt.“
-              </blockquote>
-              <div className="flex flex-col gap-4 text-ink-light">
-                <p className="leading-relaxed">
-                  Am tipărit această ediție pe hârtie fină, cu copertă dură și un
-                  format gândit să stea bine în mână. Fiecare detaliu — de la
-                  tipar la culoarea copertei — a fost ales cu răbdare.
-                </p>
-                <p className="leading-relaxed">
-                  E romanul cu care ne place să ne prezentăm. Pentru că o librărie
-                  bună se cunoaște după cărțile pe care are curajul să le pună în
-                  față.
-                </p>
-              </div>
-            </div>
-          </div>
-        </AnimatedSection>
-      )}
-
-      {/* More titles grid */}
-      <AnimatedSection className="container-page py-20 md:py-28">
+      {/* Catalog grid */}
+      <AnimatedSection className="container-page pb-20 md:pb-28">
         <div className="flex items-end justify-between gap-6">
           <SectionHeading
             eyebrow="Catalog"
@@ -132,7 +96,11 @@ export default function Home() {
           <IconFeather className="hidden h-10 w-10 text-brass/40 md:block" aria-hidden="true" />
         </div>
         <div className="mt-12">
-          <BookGrid books={books} />
+          {books.length > 0 ? (
+            <BookGrid books={books} />
+          ) : (
+            <p className="text-center text-ink-muted">Momentan nu există cărți publicate.</p>
+          )}
         </div>
       </AnimatedSection>
 
@@ -153,3 +121,4 @@ function Loader() {
     </div>
   )
 }
+

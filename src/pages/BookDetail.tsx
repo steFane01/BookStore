@@ -175,6 +175,30 @@ export default function BookDetail() {
         </div>
       </AnimatedSection>
 
+      {book.gallery && book.gallery.length > 0 && (
+        <AnimatedSection className="container-page py-20">
+          <SectionHeading eyebrow="În interiorul cărții" title="Galerie foto" />
+          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {book.gallery.map((src, i) => (
+              <a
+                key={`${src}-${i}`}
+                href={src}
+                target="_blank"
+                rel="noreferrer"
+                className="group block overflow-hidden border border-ink/10"
+              >
+                <img
+                  src={src}
+                  alt={`${book.title} — imagine ${i + 1}`}
+                  loading="lazy"
+                  className="aspect-[3/4] w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              </a>
+            ))}
+          </div>
+        </AnimatedSection>
+      )}
+
       {/* Continue exploring */}
       <div className="container-page py-16 text-center">
         <button onClick={() => navigate('/')} className="btn btn-outline px-7 py-3">

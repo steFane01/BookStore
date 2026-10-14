@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { DeliveryMethod } from '../types'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { OrderSummary } from '../components/OrderSummary'
@@ -11,6 +13,7 @@ export default function Checkout() {
   const navigate = useNavigate()
   const { items, subtotal, clearCart } = useCart()
   const { user } = useAuth()
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('courier')
 
   if (items.length === 0) {
     return (
@@ -57,6 +60,8 @@ export default function Checkout() {
             <CheckoutForm
               items={items}
               userId={user?.id}
+              deliveryMethod={deliveryMethod}
+              onDeliveryMethodChange={setDeliveryMethod}
               onSuccess={handleSuccess}
               onError={handleError}
             />
@@ -64,7 +69,7 @@ export default function Checkout() {
 
           {/* Summary */}
           <aside className="lg:sticky lg:top-24">
-            <OrderSummary items={items} subtotal={subtotal} />
+            <OrderSummary items={items} subtotal={subtotal} deliveryMethod={deliveryMethod} />
           </aside>
         </div>
       </AnimatedSection>

@@ -57,6 +57,10 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
       # Inbox that receives contact-form messages; defaults to SMTP_USER.
       CONTACT_TO: ${CONTACT_TO:-}
+      # Where admin-uploaded book images are stored (persistent volume).
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -87,3 +91,4 @@ services:
 
 volumes:
   db_data:
+  uploads_data:
