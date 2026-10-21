@@ -57,6 +57,8 @@ export async function ensureSchema() {
     DO $$ BEGIN
       CREATE TYPE order_status AS ENUM ('pending','processing','shipped','delivered','cancelled');
                                                                  EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    DO $$ BEGIN
+      CREATE TYPE product_type AS ENUM ('physical', 'digital'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
   `)
 
   // ---- users ----
@@ -96,12 +98,38 @@ export async function ensureSchema() {
       language                 TEXT,
       format                   TEXT,
       category                 TEXT,
+      category_id              TEXT,
+      product_type             product_type NOT NULL DEFAULT 'physical',
+      variants                 JSONB NOT NULL DEFAULT '[]',
+      digital_file_url         TEXT,
+      digital_access           TEXT,
+      shipping_info            JSONB NOT NULL DEFAULT '{}',
       featured                 BOOLEAN NOT NULL DEFAULT false,
       status                   book_status NOT NULL DEFAULT 'draft',
       tags                     TEXT[] NOT NULL DEFAULT '{}',
       created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
     )
+  `)
+
+  // ---- product_categories ---- (the three canonical categories)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL UNIQUE,
+      slug       TEXT NOT NULL UNIQUE,
+      blurb      TEXT NOT NULL DEFAULT '',
+      sort       INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `)
+  await pool.query(`
+    INSERT INTO product_categories (id, name, slug, blurb, sort) VALUES
+      ('carti',           'Cărți',             'carti',            'Cărți tipărite cu răbdare.', 1),
+      ('produse-digitale','Produse Digitale',  'produse-digitale', 'Fișiere, cursuri și acces digital cu livrare automată.', 2),
+      ('diverse-accesorii','Diverse & Accesorii','diverse-accesorii','Accesorii și obiecte care însoțesc lectura.', 3)
+    ON CONFLICT (id) DO UPDATE SET
+      name = EXCLUDED.name, slug = EXCLUDED.slug, blurb = EXCLUDED.blurb, sort = EXCLUDED.sort
   `)
 
   // ---- addresses ----
@@ -217,6 +245,13 @@ export async function ensureSchema() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS ship_postal_code TEXT;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS ship_notes       TEXT;
     ALTER TABLE books   ADD COLUMN IF NOT EXISTS gallery         TEXT[] NOT NULL DEFAULT '{}';
+    ALTER TABLE books   ADD COLUMN IF NOT EXISTS category_id     TEXT;
+    ALTER TABLE books   ADD COLUMN IF NOT EXISTS product_type    product_type NOT NULL DEFAULT 'physical';
+    ALTER TABLE books   ADD COLUMN IF NOT EXISTS variants        JSONB NOT NULL DEFAULT '[]';
+    ALTER TABLE books   ADD COLUMN IF NOT EXISTS digital_file_url TEXT;
+    ALTER TABLE books   ADD COLUMN IF NOT EXISTS digital_access  TEXT;
+    ALTER TABLE books   ADD COLUMN IF NOT EXISTS shipping_info   JSONB NOT NULL DEFAULT '{}';
+    UPDATE books SET category_id = 'carti' WHERE category_id IS NULL;
   `)
 
   // ---- indexes (IF NOT EXISTS so they're also idempotent) ----
@@ -224,6 +259,7 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_books_status      ON books (status);
     CREATE INDEX IF NOT EXISTS idx_books_featured    ON books (featured) WHERE featured = true;
     CREATE INDEX IF NOT EXISTS idx_books_category    ON books (category);
+    CREATE INDEX IF NOT EXISTS idx_books_category_id ON books (category_id);
     CREATE INDEX IF NOT EXISTS idx_orders_user       ON orders (user_id);
     CREATE INDEX IF NOT EXISTS idx_orders_status     ON orders (status);
     CREATE INDEX IF NOT EXISTS idx_orders_created    ON orders (created_at DESC);

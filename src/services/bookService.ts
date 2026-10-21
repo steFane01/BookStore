@@ -1,5 +1,5 @@
-import { mockBooks, mockBooksExtended } from '../data/books'
-import type { AdminBookInput, Book } from '../types'
+import { mockBooks, mockBooksExtended, mockCategories } from '../data/books'
+import type { AdminBookInput, Book, ProductCategory } from '../types'
 import { api, backendAvailable, HttpError, NetworkError } from './http'
 
 /**
@@ -25,18 +25,42 @@ function isOffline(err: unknown): boolean {
  * errors (401/403/404/422/500) are surfaced as-is, never masked by mocks.
  */
 export const bookService = {
-  /** Public active catalog (shop/home). */
-  async getBooks(): Promise<Book[]> {
+  /** Public active catalog (shop/home). Optionally filtered by category id/slug. */
+  async getBooks(category?: string): Promise<Book[]> {
+    const fallback = () =>
+      mockBooksExtended.filter(
+        (b) =>
+          b.status === 'active' &&
+          (!category ||
+            b.categoryId === category ||
+            (b.category ?? '').toLowerCase() === category.toLowerCase()),
+      )
     if (!backendAvailable()) {
       await mockLatency()
-      return mockBooksExtended.filter((b) => b.status === 'active')
+      return fallback()
     }
     try {
-      return await api<Book[]>('/books')
+      const query = category ? `?categorie=${encodeURIComponent(category)}` : ''
+      return await api<Book[]>(`/books${query}`)
     } catch (err) {
       if (!isOffline(err)) throw err
       await mockLatency()
-      return mockBooksExtended.filter((b) => b.status === 'active')
+      return fallback()
+    }
+  },
+
+  /** The three canonical RV STUDIO storefront categories. */
+  async getCategories(): Promise<ProductCategory[]> {
+    if (!backendAvailable()) {
+      await mockLatency(150)
+      return [...mockCategories]
+    }
+    try {
+      return await api<ProductCategory[]>('/books/categories')
+    } catch (err) {
+      if (!isOffline(err)) throw err
+      await mockLatency(150)
+      return [...mockCategories]
     }
   },
 

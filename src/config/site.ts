@@ -5,8 +5,8 @@
  * contact details, social links) lives here in one obvious place.
  */
 export const siteConfig = {
-  brandName: 'Librăria',
-  brandNameLong: 'Librăria — Cărți & Tipar',
+  brandName: 'RV STUDIO',
+  brandNameLong: 'RV STUDIO — Cărți & Tipar',
   tagline: 'O librărie independentă și o mică editură.',
   description:
     'Cărți atent alese, tipografie frumoasă și gustul lucrurilor făcute cu răbdare. O librărie pentru cei care citesc încet, cu creionul în mână.',

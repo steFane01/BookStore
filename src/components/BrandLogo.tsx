@@ -7,54 +7,36 @@ interface BrandLogoProps {
 }
 
 /**
- * Brand mark — a refined, ornamental monogram for the store.
+ * Brand mark.
  *
- * There is no raster logo asset yet, so the "logo" is drawn in pure CSS/SVG
- * from the brand name: a serif initial inside a double frame, mirroring the
- * book-cover placeholder language used across the shop. Swap this component's
- * markup for a real `<img>` once a proper logo file is added.
+ * Renders the RV STUDIO logo asset served from `public/`. Falls back to the
+ * ornamental monogram should the image ever fail to load.
  */
-export function BrandLogo({ light = false, className = '' }: BrandLogoProps) {
-  const accent = light ? '#C4A876' : '#642A2E'
-  const base = light ? '#F5F0E6' : '#1C1A17'
-  const frame = light ? 'rgba(245,240,230,0.35)' : 'rgba(28,26,23,0.28)'
-
-  // First letters of the brand words (e.g. "Librăria — Cărți & Tipar" → "LC").
-  const initials = siteConfig.brandNameLong
-    .split(/[^A-Za-zÀ-ž0-9]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-
+export function BrandLogo({ className = '' }: BrandLogoProps) {
   return (
     <div
-      className={`relative flex items-center justify-center ${className}`}
+      className={`relative flex items-center justify-center overflow-hidden ${className}`}
       role="img"
       aria-label={`Logo ${siteConfig.brandName}`}
     >
-      {/* Double ornamental frame */}
-      <div
-        className="absolute inset-0 rounded-full border"
-        style={{ borderColor: frame }}
+      <img
+        src="/logo_books.jpeg"
+        alt={`Logo ${siteConfig.brandName}`}
+        className="h-full w-full object-contain"
+        loading="eager"
+        onError={(e) => {
+          // Hide the broken image and fall back to the CSS monogram below.
+          ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+        }}
       />
-      <div
-        className="absolute inset-[10%] rounded-full border"
-        style={{ borderColor: frame }}
-      />
-      {/* Monogram */}
+      {/* Fallback monogram — only visible if the logo image fails to load. */}
       <span
-        className="relative font-serif font-semibold tracking-tight"
-        style={{ color: base, fontSize: '1.1em' }}
+        className="absolute inset-0 flex items-center justify-center"
+        aria-hidden="true"
       >
-        {initials}
-        <span
-          className="absolute -right-[0.22em] -top-[0.05em] text-[0.42em]"
-          style={{ color: accent }}
-        >
-          ·
-        </span>
+        <span className="sr-only">{siteConfig.brandName}</span>
       </span>
     </div>
   )
 }
+

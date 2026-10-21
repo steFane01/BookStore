@@ -9,14 +9,26 @@ import {
 } from 'react'
 import type { Book, CartItem } from '../types'
 
+interface AddItemOptions {
+  quantity?: number
+  /** Chosen variant id (when the product offers variants). */
+  variantId?: string
+  /** Human-readable variant name (for the order summary). */
+  variantName?: string
+  /** Effective per-unit price for the chosen variant (base + delta). */
+  price?: number
+  /** 'digital' items carry no shipping. */
+  productType?: 'physical' | 'digital'
+}
+
 interface CartContextValue {
   items: CartItem[]
   count: number
   subtotal: number
   isOpen: boolean
-  addItem: (book: Book, quantity?: number) => void
-  removeItem: (bookId: string) => void
-  setQuantity: (bookId: string, quantity: number) => void
+  addItem: (book: Book, options?: AddItemOptions) => void
+  removeItem: (bookId: string, variantId?: string) => void
+  setQuantity: (bookId: string, quantity: number, variantId?: string) => void
   clearCart: () => void
   openCart: () => void
   closeCart: () => void
@@ -51,12 +63,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
     writeCart(items)
   }, [items])
 
-  const addItem = useCallback((book: Book, quantity = 1) => {
+  const addItem = useCallback((book: Book, options: AddItemOptions = {}) => {
+    const quantity = options.quantity ?? 1
+    const variantId = options.variantId
+    const key = variantId ? `${book.id}__${variantId}` : book.id
     setItems((prev) => {
-      const existing = prev.find((i) => i.bookId === book.id)
+      const existing = prev.find(
+        (i) => (i.variantId ? `${i.bookId}__${i.variantId}` : i.bookId) === key,
+      )
       if (existing) {
         return prev.map((i) =>
-          i.bookId === book.id ? { ...i, quantity: i.quantity + quantity } : i,
+          (i.variantId ? `${i.bookId}__${i.variantId}` : i.bookId) === key
+            ? { ...i, quantity: i.quantity + quantity }
+            : i,
         )
       }
       return [
@@ -67,25 +86,45 @@ export function CartProvider({ children }: { children: ReactNode }) {
           author: book.author,
           coverSrc: book.cover.src,
           coverAlt: book.cover.alt,
-          price: book.price,
+          price: options.price ?? book.price,
           quantity,
+          variantId,
+          variantName: options.variantName,
+          productType: options.productType ?? book.productType,
         },
       ]
     })
     setIsOpen(true)
   }, [])
 
-  const removeItem = useCallback((bookId: string) => {
-    setItems((prev) => prev.filter((i) => i.bookId !== bookId))
-  }, [])
-
-  const setQuantity = useCallback((bookId: string, quantity: number) => {
+  const removeItem = useCallback((bookId: string, variantId?: string) => {
     setItems((prev) =>
-      quantity <= 0
-        ? prev.filter((i) => i.bookId !== bookId)
-        : prev.map((i) => (i.bookId === bookId ? { ...i, quantity } : i)),
+      prev.filter((i) =>
+        variantId
+          ? !(i.bookId === bookId && i.variantId === variantId)
+          : i.bookId !== bookId,
+      ),
     )
   }, [])
+
+  const setQuantity = useCallback(
+    (bookId: string, quantity: number, variantId?: string) => {
+      setItems((prev) =>
+        quantity <= 0
+          ? prev.filter((i) =>
+              variantId
+                ? !(i.bookId === bookId && i.variantId === variantId)
+                : i.bookId !== bookId,
+            )
+          : prev.map((i) =>
+              i.bookId === bookId && (variantId ? i.variantId === variantId : true)
+                ? { ...i, quantity }
+                : i,
+            ),
+      )
+    },
+    [],
+  )
 
   const clearCart = useCallback(() => setItems([]), [])
   const openCart = useCallback(() => setIsOpen(true), [])

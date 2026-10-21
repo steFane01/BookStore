@@ -1,119 +1,53 @@
-import { useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { siteConfig } from '../config/site'
-import { IconArrowLeft, IconArrowRight } from './icons'
+import type { ProductCategory } from '../types'
+import { IconArrowRight } from './icons'
 
-interface BannerSlide {
-  eyebrow: string
-  title: string
-  description: string
-  cta?: { label: string; to: string }
+interface CategoryShowcaseProps {
+  categories: ProductCategory[]
 }
 
-const slides: BannerSlide[] = [
-  {
-    eyebrow: 'Bine ați venit',
-    title: 'O librărie pentru cei care citesc încet',
-    description:
-      'Cărți atent alese, tipografie frumoasă și gustul lucrurilor făcute cu răbdare — cu creionul în mână.',
-    cta: { label: 'Explorează catalogul', to: '/' },
-  },
-  {
-    eyebrow: 'Livrare rapidă',
-    title: 'Acasă sau în EasyBox SameDay',
-    description:
-      'Alege curierul la ușă sau un punct de ridicare EasyBox din orașul tău — direct în coșul de cumpărături.',
-    cta: { label: 'Cum comand', to: '/' },
-  },
-  {
-    eyebrow: 'Editura noastră',
-    title: 'Cărți tipărite cu răbdare',
-    description:
-      'Hârtie fină, copertă dură și un format gândit să stea bine în mână. Fiecare detaliu contează.',
-    cta: { label: 'Despre noi', to: '/despre' },
-  },
-]
-
 /**
- * Home banner — a horizontally scrollable editorial strip.
+ * Home category showcase — replaces the old dark-brown lateral scroll banner.
  *
- * Slides sit on a flex row inside an overflow container, so the user can swipe
- * (touch), drag, or use the arrow buttons to browse from left to right. No
- * auto-rotation: the scroll is always controlled by the visitor.
+ * Renders the three canonical RV STUDIO storefront categories (Cărți, Produse
+ * Digitale, Diverse & Accesorii) as a light, editorial grid on top of the
+ * shared category artwork. Each card links to the catalog filtered by that
+ * category (`/?categorie=<id>`).
  */
-export function HomeBanner() {
-  const trackRef = useRef<HTMLDivElement>(null)
-
-  const scrollBy = (dir: 1 | -1) => {
-    const el = trackRef.current
-    if (!el) return
-    el.scrollBy({ left: dir * Math.round(el.clientWidth * 0.8), behavior: 'smooth' })
-  }
-
+export function HomeBanner({ categories }: CategoryShowcaseProps) {
   return (
-    <section className="relative overflow-hidden border-b border-ink/10 bg-[#241f19] text-paper-100">
-      <div className="container-page pt-28 pb-10 md:pt-36">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-[0.7rem] uppercase tracking-[0.4em] text-brass-light/90">
-            {siteConfig.brandName} — Cărți & Tipar
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => scrollBy(-1)}
-              aria-label="Derulează bannerul la stânga"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-paper-100/30 text-paper-100 transition-colors hover:border-brass hover:text-brass-light"
-            >
-              <IconArrowLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollBy(1)}
-              aria-label="Derulează bannerul la dreapta"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-paper-100/30 text-paper-100 transition-colors hover:border-brass hover:text-brass-light"
-            >
-              <IconArrowRight className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      </div>
+    <section className="border-b border-ink/10 bg-paper-100 pb-14 pt-24 md:pb-20 md:pt-32">
+      <div className="container-page">
+        {/* Shared category artwork */}
+        <img
+          src="/welcomepage.jpeg"
+          alt="Colecțiile RV STUDIO — cărți, produse digitale și accesorii"
+          className="mb-12 h-56 w-full rounded-sm object-cover md:h-72"
+        />
 
-      {/* Scrollable slide track */}
-      <div
-        ref={trackRef}
-        className="scroll-smooth snap-x snap-mandatory overflow-x-auto scrollbar-none"
-        role="region"
-        aria-label="Banner promoțional"
-      >
-        <div className="container-page flex gap-6 pb-14 md:gap-10">
-          {slides.map((slide) => (
-            <article
-              key={slide.eyebrow}
-              className="snap-start rounded-sm border border-paper-100/15 bg-paper-100/5 p-8 backdrop-blur-sm md:w-[68%] md:shrink-0 lg:w-[56%] lg:p-10"
+        <div className="grid gap-5 sm:grid-cols-3">
+          {categories.map((cat) => (
+            <Link
+              key={cat.id}
+              to={`/?categorie=${encodeURIComponent(cat.slug ?? cat.id)}`}
+              className="group flex flex-col justify-between rounded-sm border border-ink/10 bg-paper-50 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-oxblood/40 hover:shadow-lift"
             >
-              <span className="eyebrow flex items-center gap-3 text-brass-light">
-                <span className="h-px w-8 bg-brass/60" aria-hidden="true" />
-                {slide.eyebrow}
+              <div>
+                <p className="eyebrow">Colecția</p>
+                <h2 className="serif-display mt-2 text-3xl text-ink">{cat.name}</h2>
+                <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+                  {cat.blurb}
+                </p>
+              </div>
+              <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium tracking-wide text-oxblood transition-colors group-hover:text-oxblood-dark">
+                Explorează
+                <IconArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
               </span>
-              <h2 className="serif-display mt-5 max-w-2xl text-balance text-3xl text-paper-100 sm:text-4xl md:text-5xl">
-                {slide.title}
-              </h2>
-              <p className="mt-4 max-w-xl text-base leading-relaxed text-paper-200/85">
-                {slide.description}
-              </p>
-              {slide.cta && (
-                <Link
-                  to={slide.cta.to}
-                  className="btn mt-7 inline-flex items-center gap-2 rounded-sm border border-brass/60 px-6 py-3 text-sm uppercase tracking-[0.18em] text-brass-light transition-colors hover:bg-brass/10"
-                >
-                  {slide.cta.label}
-                  <IconArrowRight className="h-4 w-4" />
-                </Link>
-              )}
-            </article>
+            </Link>
           ))}
         </div>
       </div>
     </section>
   )
 }
+

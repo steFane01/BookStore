@@ -29,6 +29,8 @@ export default function Checkout() {
     )
   }
 
+  const isDigitalOnly = items.every((i) => i.productType === 'digital')
+
   const handleSuccess = (orderId: string) => {
     clearCart()
     navigate(`/comanda/${orderId}`, { replace: true })
@@ -50,8 +52,12 @@ export default function Checkout() {
         </button>
         <SectionHeading
           eyebrow="Finalizare comandă"
-          title="Detalii de livrare"
-          description="Completează datele pentru livrare. Nu efectuăm plata online."
+          title={isDigitalOnly ? 'Detalii de contact' : 'Detalii de livrare'}
+          description={
+            isDigitalOnly
+              ? 'Produsele digitale se livrează instant, fără costuri de transport.'
+              : 'Completează datele pentru livrare. Nu efectuăm plata online.'
+          }
         />
 
         <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_24rem] lg:items-start">

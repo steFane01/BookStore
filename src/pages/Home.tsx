@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Book } from '../types'
+import { useSearchParams } from 'react-router-dom'
+import type { Book, ProductCategory } from '../types'
 import { bookService } from '../services/bookService'
 import { BookIntro } from '../components/BookIntro'
 import { HomeBanner } from '../components/HomeBanner'
@@ -14,16 +15,23 @@ const INTRO_SESSION_KEY = 'libraria.intro-seen'
 
 export default function Home() {
   const [books, setBooks] = useState<Book[]>([])
+  const [categories, setCategories] = useState<ProductCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [showIntro, setShowIntro] = useState(false)
+  const [searchParams] = useSearchParams()
+  const categoryParam = searchParams.get('categorie') ?? undefined
 
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
-        const data = await bookService.getBooks()
+        const [data, cats] = await Promise.all([
+          bookService.getBooks(categoryParam),
+          bookService.getCategories(),
+        ])
         if (!active) return
         setBooks(data)
+        setCategories(cats)
       } finally {
         if (active) setLoading(false)
       }
@@ -31,7 +39,11 @@ export default function Home() {
     return () => {
       active = false
     }
-  }, [])
+  }, [categoryParam])
+
+  const activeCategory = categories.find(
+    (c) => c.id === categoryParam || c.slug === categoryParam,
+  )
 
   useEffect(() => {
     let seen = false
@@ -63,8 +75,8 @@ export default function Home() {
     <>
       {showIntro && <BookIntro onEnter={handleEnter} />}
 
-      {/* Brand banner — horizontally scrollable */}
-      <HomeBanner />
+      {/* Storefront categories — the three RV STUDIO collections */}
+      <HomeBanner categories={categories} />
 
       {/* Lateral cover strip — only covers, no details */}
       <CoversStrip books={books} />
@@ -90,8 +102,12 @@ export default function Home() {
         <div className="flex items-end justify-between gap-6">
           <SectionHeading
             eyebrow="Catalog"
-            title="Titluri din librărie"
-            description="Lucrăm la noi apariții. Până atunci, acestea sunt cărțile pe care le poți avea acasă."
+            title={activeCategory ? activeCategory.name : 'Titluri din librărie'}
+            description={
+              activeCategory
+                ? activeCategory.blurb
+                : 'Lucrăm la noi apariții. Până atunci, acestea sunt produsele pe care le poți avea acasă.'
+            }
           />
           <IconFeather className="hidden h-10 w-10 text-brass/40 md:block" aria-hidden="true" />
         </div>
@@ -99,7 +115,9 @@ export default function Home() {
           {books.length > 0 ? (
             <BookGrid books={books} />
           ) : (
-            <p className="text-center text-ink-muted">Momentan nu există cărți publicate.</p>
+            <p className="text-center text-ink-muted">
+              Momentan nu există produse publicate în această colecție.
+            </p>
           )}
         </div>
       </AnimatedSection>

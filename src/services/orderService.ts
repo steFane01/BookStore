@@ -84,13 +84,17 @@ export const orderService = {
       const draft = await api<OrderDraft>('/orders', {
         method: 'POST',
         body: {
-          lines: items.map(({ bookId, title, author, price, quantity }) => ({
-            bookId,
-            title,
-            author,
-            price,
-            quantity,
-          })),
+          lines: items.map(
+            ({ bookId, title, author, price, quantity, variantName, productType }) => ({
+              bookId,
+              title,
+              author,
+              price,
+              quantity,
+              variantName,
+              productType,
+            }),
+          ),
           shipping,
           userId,
           deliveryMethod: options.deliveryMethod,
@@ -159,13 +163,17 @@ export const orderService = {
     const draft: OrderDraft = {
       id: `order-${Date.now()}`,
       reference,
-      lines: items.map(({ bookId, title, author, price, quantity }) => ({
-        bookId,
-        title,
-        author,
-        price,
-        quantity,
-      })),
+      lines: items.map(
+        ({ bookId, title, author, price, quantity, variantName, productType }) => ({
+          bookId,
+          title,
+          author,
+          price,
+          quantity,
+          variantName,
+          productType,
+        }),
+      ),
       shipping,
       subtotal,
       shippingCost,

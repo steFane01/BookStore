@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { Book, OrderDraft } from '../types'
+import type { Book, OrderDraft, ProductCategory } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { bookService } from '../services/bookService'
 import { orderService } from '../services/orderService'
@@ -19,6 +19,7 @@ export default function Admin() {
 
   const [tab, setTab] = useState<Tab>('dashboard')
   const [books, setBooks] = useState<Book[]>([])
+  const [categories, setCategories] = useState<ProductCategory[]>([])
   const [orders, setOrders] = useState<OrderDraft[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -36,12 +37,14 @@ export default function Admin() {
     ;(async () => {
       setLoadError(null)
       try {
-        const [b, o] = await Promise.all([
+        const [b, c, o] = await Promise.all([
           bookService.getAllBooks(),
+          bookService.getCategories(),
           orderService.getOrders(),
         ])
         if (!active) return
         setBooks(b)
+        setCategories(c)
         setOrders(o)
         setLoading(false)
       } catch (err) {
@@ -130,7 +133,7 @@ export default function Admin() {
         <div className="mt-8">
           {tab === 'dashboard' && <DashboardTab stats={stats} />}
           {tab === 'catalog' && (
-            <CatalogTab books={books} onRefresh={refreshBooks} />
+            <CatalogTab books={books} categories={categories} onRefresh={refreshBooks} />
           )}
           {tab === 'orders' && <OrdersTab orders={orders} />}
           {tab === 'settings' && <SettingsTab />}
@@ -181,9 +184,11 @@ function DashboardTab({
 
 function CatalogTab({
   books,
+  categories,
   onRefresh,
 }: {
   books: Book[]
+  categories: ProductCategory[]
   onRefresh: () => Promise<void>
 }) {
   const [editing, setEditing] = useState<Book | null | 'new'>(null)
@@ -291,9 +296,9 @@ function CatalogTab({
       </div>
 
       {editing === 'new' ? (
-        <BookFormModal book={null} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await onRefresh() }} />
+        <BookFormModal book={null} categories={categories} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await onRefresh() }} />
       ) : editing ? (
-        <BookFormModal book={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await onRefresh() }} />
+        <BookFormModal book={editing} categories={categories} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await onRefresh() }} />
       ) : null}
     </div>
   )

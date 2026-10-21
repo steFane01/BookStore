@@ -19,6 +19,7 @@ BEGIN;
 CREATE TYPE user_role  AS ENUM ('customer', 'admin');
 CREATE TYPE book_status AS ENUM ('draft', 'active');
 CREATE TYPE order_status AS ENUM ('pending', 'processing', 'shipped', 'delivered', 'cancelled');
+CREATE TYPE product_type AS ENUM ('physical', 'digital');
 
 -- ---------------------------------------------------------------------------
 -- users — matches the frontend `User` type (+ password hash for a real backend)
@@ -34,7 +35,22 @@ CREATE TABLE users (
 );
 
 -- ---------------------------------------------------------------------------
--- books — matches the frontend `Book` type
+-- product_categories — the three canonical RV STUDIO categories. Every product
+-- (row in `books`, which now covers all categories) belongs to exactly one.
+-- ---------------------------------------------------------------------------
+CREATE TABLE product_categories (
+    id     TEXT PRIMARY KEY,          -- slug, e.g. 'carti'
+    name   TEXT NOT NULL UNIQUE,
+    slug   TEXT NOT NULL UNIQUE,
+    blurb  TEXT NOT NULL DEFAULT '',
+    sort   INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------------------
+-- books — matches the frontend `Book` type. Despite the name, this table now
+-- stores EVERY product (books, digital products, accessories) — the RV STUDIO
+-- multi-category catalog. `product_type` + `category_id` drive the UI.
 -- ---------------------------------------------------------------------------
 CREATE TABLE books (
     id                       TEXT PRIMARY KEY,          -- human slug, e.g. 'cartea-de-pagini-luminoase'
@@ -60,6 +76,13 @@ CREATE TABLE books (
     language                 TEXT,
     format                   TEXT,
     category                 TEXT,
+    -- RV STUDIO multi-category fields
+    category_id              TEXT REFERENCES product_categories (id),
+    product_type             product_type NOT NULL DEFAULT 'physical',
+    variants                 JSONB NOT NULL DEFAULT '[]',   -- [{id,name,price_delta,stock}]
+    digital_file_url         TEXT,                            -- digital products only
+    digital_access           TEXT,                            -- delivery/access instructions (digital)
+    shipping_info            JSONB NOT NULL DEFAULT '{}',     -- {delivery,payment,returns} (physical)
     featured                 BOOLEAN NOT NULL DEFAULT false,
     status                   book_status NOT NULL DEFAULT 'draft',
     tags                     TEXT[] NOT NULL DEFAULT '{}',

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { AdminBookInput, Book } from '../types'
+import type { AdminBookInput, Book, ProductCategory, ProductVariant } from '../types'
 import { FormField } from './FormField'
 import { bookService } from '../services/bookService'
 import { uploadImage, isImageFile } from '../services/uploadService'
@@ -8,17 +8,33 @@ import { IconClose } from './icons'
 interface BookFormModalProps {
   /** When present the modal edits this book; otherwise it creates a new one. */
   book: Book | null
+  /** The storefront categories, shown in the category dropdown. */
+  categories: ProductCategory[]
   onClose: () => void
   onSaved: () => void
 }
 
-export function BookFormModal({ book, onClose, onSaved }: BookFormModalProps) {
+export function BookFormModal({ book, categories, onClose, onSaved }: BookFormModalProps) {
   const [title, setTitle] = useState(book?.title ?? '')
   const [author, setAuthor] = useState(book?.author ?? '')
   const [price, setPrice] = useState(String(book?.price ?? ''))
   const [stock, setStock] = useState(String(book?.stock ?? ''))
   const [coverSrc, setCoverSrc] = useState(book?.cover?.src ?? '')
   const [category, setCategory] = useState(book?.category ?? '')
+  const [categoryId, setCategoryId] = useState(book?.categoryId ?? '')
+  const [productType, setProductType] = useState(book?.productType ?? 'physical')
+  const [variants, setVariants] = useState<ProductVariant[]>(book?.variants ?? [])
+  const [digitalFileUrl, setDigitalFileUrl] = useState(book?.digitalFileUrl ?? '')
+  const [digitalAccess, setDigitalAccess] = useState(book?.digitalAccess ?? '')
+  const [shippingDelivery, setShippingDelivery] = useState(
+    book?.shippingInfo?.delivery ?? '',
+  )
+  const [shippingPayment, setShippingPayment] = useState(
+    book?.shippingInfo?.payment ?? '',
+  )
+  const [shippingReturns, setShippingReturns] = useState(
+    book?.shippingInfo?.returns ?? '',
+  )
   const [shortDescription, setShortDescription] = useState(book?.shortDescription ?? '')
   const [description, setDescription] = useState(book?.description ?? '')
   const [excerpt, setExcerpt] = useState(book?.excerpt ?? '')
@@ -75,6 +91,21 @@ export function BookFormModal({ book, onClose, onSaved }: BookFormModalProps) {
     }
   }
 
+  const updateVariant = (i: number, patch: Partial<ProductVariant>) => {
+    setVariants((prev) => prev.map((v, j) => (j === i ? { ...v, ...patch } : v)))
+  }
+
+  const addVariant = () => {
+    setVariants((prev) => [
+      ...prev,
+      { id: `v-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: '', priceDelta: 0, stock: 0 },
+    ])
+  }
+
+  const removeVariant = (i: number) => {
+    setVariants((prev) => prev.filter((_, j) => j !== i))
+  }
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim() || !author.trim()) {
@@ -97,6 +128,16 @@ export function BookFormModal({ book, onClose, onSaved }: BookFormModalProps) {
       language: book?.language,
       format: book?.format,
       category: category.trim() || undefined,
+      categoryId: categoryId.trim() || undefined,
+      productType,
+      variants,
+      digitalFileUrl: digitalFileUrl.trim() || undefined,
+      digitalAccess: digitalAccess.trim() || undefined,
+      shippingInfo: {
+        ...(shippingDelivery.trim() ? { delivery: shippingDelivery.trim() } : {}),
+        ...(shippingPayment.trim() ? { payment: shippingPayment.trim() } : {}),
+        ...(shippingReturns.trim() ? { returns: shippingReturns.trim() } : {}),
+      },
       featured,
       status,
     }
@@ -170,9 +211,60 @@ export function BookFormModal({ book, onClose, onSaved }: BookFormModalProps) {
               />
             )}
           </div>
-          <FormField label="Categorie" htmlFor="bk-category">
-            <input id="bk-category" className="field" value={category} onChange={(e) => setCategory(e.target.value)} />
+          <FormField label="Tip produs" htmlFor="bk-type">
+            <select
+              id="bk-type"
+              className="field"
+              value={productType}
+              onChange={(e) => setProductType(e.target.value as 'physical' | 'digital')}
+            >
+              <option value="physical">Produs fizic (livrat)</option>
+              <option value="digital">Produs digital (descărcare)</option>
+            </select>
           </FormField>
+          <FormField label="Categorie" htmlFor="bk-category">
+            <select
+              id="bk-category"
+              className="field"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+            >
+              <option value="">— alege categoria —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="Etichetă categorie (text liber)" htmlFor="bk-category-label">
+            <input id="bk-category-label" className="field" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="ex: Cărți, Accesorii (opțional)" />
+          </FormField>
+
+          {productType === 'digital' ? (
+            <div className="sm:col-span-2 flex flex-col gap-4 border border-brass/40 bg-brass/5 p-4">
+              <p className="text-sm font-medium text-ink">Detalii produs digital</p>
+              <FormField label="URL / cale fișier sau link de acces" htmlFor="bk-dfile">
+                <input id="bk-dfile" className="field" value={digitalFileUrl} onChange={(e) => setDigitalFileUrl(e.target.value)} placeholder="https://… sau /files/curs.pdf" />
+              </FormField>
+              <FormField label="Notă de acces (ce primește clientul)" htmlFor="bk-daccess">
+                <textarea id="bk-daccess" rows={2} className="field resize-none" value={digitalAccess} onChange={(e) => setDigitalAccess(e.target.value)} placeholder="ex: Accesul se trimite prin email după confirmarea comenzii." />
+              </FormField>
+            </div>
+          ) : (
+            <div className="sm:col-span-2 flex flex-col gap-3 border border-ink/10 bg-paper-100/40 p-4">
+              <p className="text-sm font-medium text-ink">Informații livrare / plată / returnare</p>
+              <FormField label="Livrare" htmlFor="bk-ship-delivery">
+                <input id="bk-ship-delivery" className="field" value={shippingDelivery} onChange={(e) => setShippingDelivery(e.target.value)} placeholder="ex: Curier SameDay, 24-48h" />
+              </FormField>
+              <FormField label="Plată" htmlFor="bk-ship-payment">
+                <input id="bk-ship-payment" className="field" value={shippingPayment} onChange={(e) => setShippingPayment(e.target.value)} placeholder="ex: Ramburs sau card" />
+              </FormField>
+              <FormField label="Returnare" htmlFor="bk-ship-returns">
+                <input id="bk-ship-returns" className="field" value={shippingReturns} onChange={(e) => setShippingReturns(e.target.value)} placeholder="ex: 14 zile, conform legii" />
+              </FormField>
+            </div>
+          )}
           <div className="sm:col-span-2">
             <FormField label="Galerie (imagini din interior)" htmlFor="bk-gallery-file">
               <input
@@ -235,6 +327,67 @@ export function BookFormModal({ book, onClose, onSaved }: BookFormModalProps) {
               />
               Publicată
             </label>
+          </div>
+
+          {/* Variante */}
+          <div className="sm:col-span-2 flex flex-col gap-3 border border-ink/10 bg-paper-100/40 p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-ink">Variante (opțional)</p>
+              <button
+                type="button"
+                onClick={addVariant}
+                className="btn btn-outline px-3 py-1.5 text-xs"
+              >
+                + Adaugă variantă
+              </button>
+            </div>
+            {variants.length === 0 && (
+              <p className="text-xs text-ink-muted">
+                ex: gravură format A4, mărime S/M/L, ediție limitată. Fiecare variantă își
+                poate avea prețul și stocul proprii.
+              </p>
+            )}
+            {variants.map((v, i) => (
+              <div key={v.id} className="grid gap-2 sm:grid-cols-[1fr_6rem_6rem_auto] sm:items-end">
+                <FormField label={`Nume varianta ${i + 1}`} htmlFor={`bk-var-name-${v.id}`}>
+                  <input
+                    id={`bk-var-name-${v.id}`}
+                    className="field"
+                    value={v.name}
+                    onChange={(e) => updateVariant(i, { name: e.target.value })}
+                    placeholder="ex: Gravura A4"
+                  />
+                </FormField>
+                <FormField label="Δ preț (RON)" htmlFor={`bk-var-price-${v.id}`}>
+                  <input
+                    id={`bk-var-price-${v.id}`}
+                    type="number"
+                    step="0.01"
+                    className="field"
+                    value={v.priceDelta ?? 0}
+                    onChange={(e) => updateVariant(i, { priceDelta: Number(e.target.value) || 0 })}
+                  />
+                </FormField>
+                <FormField label="Stoc" htmlFor={`bk-var-stock-${v.id}`}>
+                  <input
+                    id={`bk-var-stock-${v.id}`}
+                    type="number"
+                    min="0"
+                    className="field"
+                    value={v.stock ?? 0}
+                    onChange={(e) => updateVariant(i, { stock: Number(e.target.value) || 0 })}
+                  />
+                </FormField>
+                <button
+                  type="button"
+                  onClick={() => removeVariant(i)}
+                  aria-label="Șterge varianta"
+                  className="mb-1 flex h-9 w-9 items-center justify-center justify-self-end rounded-sm text-ink-muted transition-colors hover:bg-oxblood hover:text-white"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
 
           {(error || uploading) && (

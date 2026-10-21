@@ -47,10 +47,42 @@ export interface Book {
   year?: number
   language?: string
   format?: string
+  /** Legacy free-text category label (kept for backwards compatibility). */
   category?: string
+  /** Canonical RV STUDIO category id, e.g. 'carti' | 'produse-digitale'. */
+  categoryId?: string
+  /** 'physical' → shipped; 'digital' → delivered automatically (no shipping). */
+  productType?: 'physical' | 'digital'
+  /** Selectable variants, e.g. gravura / format. Empty when not applicable. */
+  variants?: ProductVariant[]
+  /** Digital products only — URL/path of the purchased file or access link. */
+  digitalFileUrl?: string
+  /** Digital products only — how the customer receives the download. */
+  digitalAccess?: string
+  /** Physical products — { delivery, payment, returns } informational copy. */
+  shippingInfo?: Record<string, string>
   featured?: boolean
   status: BookStatus
   tags?: string[]
+}
+
+export type ProductType = 'physical' | 'digital'
+
+export interface ProductVariant {
+  id: string
+  name: string
+  /** Optional price difference vs. the product base price. */
+  priceDelta?: number
+  /** Optional per-variant stock; when absent falls back to the book.stock. */
+  stock?: number
+}
+
+export interface ProductCategory {
+  id: string
+  name: string
+  slug: string
+  blurb: string
+  sort?: number
 }
 
 export interface CartItem {
@@ -61,6 +93,12 @@ export interface CartItem {
   coverAlt: string
   price: number
   quantity: number
+  /** Identifier of the chosen variant (when the product offers variants). */
+  variantId?: string
+  /** Human-readable chosen variant name (for the order summary). */
+  variantName?: string
+  /** 'digital' items are delivered automatically and carry no shipping. */
+  productType?: 'physical' | 'digital'
 }
 
 export type UserRole = 'customer' | 'admin'
@@ -94,6 +132,10 @@ export interface OrderLine {
   author: string
   price: number
   quantity: number
+  /** Chosen variant name, if any (drives what the label shows). */
+  variantName?: string
+  /** 'digital' lines are fulfilled automatically, no shipping needed. */
+  productType?: 'physical' | 'digital'
 }
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
@@ -157,6 +199,12 @@ export interface AdminBookInput {
   language?: string
   format?: string
   category?: string
+  categoryId?: string
+  productType?: 'physical' | 'digital'
+  variants?: ProductVariant[]
+  digitalFileUrl?: string
+  digitalAccess?: string
+  shippingInfo?: Record<string, string>
   featured: boolean
   status: BookStatus
 }

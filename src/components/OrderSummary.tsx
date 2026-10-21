@@ -24,8 +24,15 @@ export function OrderSummary({
   shippingCost,
   deliveryMethod = 'courier',
 }: OrderSummaryProps) {
-  const methodLabel = deliveryMethod === 'easybox' ? 'Livrare EasyBox' : 'Livrare curier'
-  const fee = shippingCost ?? SHIPPING_FEES[deliveryMethod]
+  const methodLabel =
+    items.every((i) => i.productType === 'digital')
+      ? 'Livrare digitală'
+      : deliveryMethod === 'easybox'
+        ? 'Livrare EasyBox'
+        : 'Livrare curier'
+  const fee = items.every((i) => i.productType === 'digital')
+    ? 0
+    : shippingCost ?? SHIPPING_FEES[deliveryMethod]
   const total = subtotal + fee
 
   return (
@@ -36,7 +43,7 @@ export function OrderSummary({
 
       <ul className={`divide-y divide-ink/10 ${compact ? 'max-h-56 overflow-y-auto' : ''}`}>
         {items.map((item) => (
-          <li key={`${item.bookId}-${item.title}`} className="flex items-center gap-4 px-6 py-4">
+          <li key={`${item.bookId}-${item.variantId ?? item.title}`} className="flex items-center gap-4 px-6 py-4">
             <div className="shrink-0">
               <BookCover
                 book={{
@@ -57,6 +64,11 @@ export function OrderSummary({
               <div className="min-w-0">
                 <p className="truncate font-serif text-base text-ink">{item.title}</p>
                 <p className="text-xs text-ink-muted">{item.author}</p>
+                {item.variantName && (
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    Variantă: {item.variantName}
+                  </p>
+                )}
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-sm font-medium text-ink">

@@ -72,6 +72,10 @@ export function CheckoutForm({
   const [easyboxesLoading, setEasyboxesLoading] = useState(true)
   const easybox = easyboxes.find((e) => e.id === easyboxId) ?? null
   const shippingFee = orderService.shippingFeeFor(deliveryMethod)
+  // A digital-only order (products with productType === 'digital') does not need
+  // a shipping address or a delivery method — the file is delivered instantly.
+  const hasPhysical = items.some((i) => i.productType !== 'digital')
+  const isDigitalOnly = !hasPhysical
 
   // Load the SameDay EasyBox pickup points from the backend proxy (which talks
   // to the live SameDay API when configured, or serves the bundled demo list).
@@ -140,15 +144,17 @@ export function CheckoutForm({
     if (values.fullName.trim().length < 3) e.fullName = 'Te rugăm să introduci numele complet.'
     if (!emailRe.test(values.email.trim())) e.email = 'Adresa de email nu este validă.'
     if (values.phone.trim().length < 8) e.phone = 'Introdu un număr de telefon valid.'
-    if (deliveryMethod === 'easybox') {
-      if (!easybox) {
-        e.county = 'Alege un EasyBox SameDay pentru livrare.'
+    if (hasPhysical) {
+      if (deliveryMethod === 'easybox') {
+        if (!easybox) {
+          e.county = 'Alege un EasyBox SameDay pentru livrare.'
+        }
+      } else {
+        if (!values.county.trim()) e.county = 'Județul este obligatoriu.'
+        if (!values.locality.trim()) e.locality = 'Localitatea este obligatorie.'
+        if (!values.street.trim()) e.street = 'Strada este obligatorie.'
+        if (!values.number.trim()) e.number = 'Numărul este obligatoriu.'
       }
-    } else {
-      if (!values.county.trim()) e.county = 'Județul este obligatoriu.'
-      if (!values.locality.trim()) e.locality = 'Localitatea este obligatorie.'
-      if (!values.street.trim()) e.street = 'Strada este obligatorie.'
-      if (!values.number.trim()) e.number = 'Numărul este obligatoriu.'
     }
     if (!values.acceptTerms) e.acceptTerms = 'Trebuie să accepți termenii și condițiile.'
     if (!values.acceptPrivacy) e.acceptPrivacy = 'Trebuie să accepți politica de confidențialitate.'
@@ -182,7 +188,7 @@ export function CheckoutForm({
         {
           deliveryMethod,
           easyboxId: deliveryMethod === 'easybox' ? easyboxId : undefined,
-          shippingCost: shippingFee,
+          shippingCost: isDigitalOnly ? 0 : shippingFee,
         },
       )
       onSuccess(draft.id)
@@ -195,7 +201,7 @@ export function CheckoutForm({
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-8">
-      {savedAddresses.length > 0 && (
+      {savedAddresses.length > 0 && hasPhysical && (
         <fieldset className="flex flex-col gap-2 border border-ink/10 bg-paper-50 px-5 py-4">
           <label htmlFor="saved-address" className="text-sm font-medium text-ink">
             Folosește o adresă salvată
@@ -256,7 +262,15 @@ export function CheckoutForm({
         </div>
       </Section>
 
-      {/* Metoda de livrare */}
+      {/* Metoda de livrare — only for physical items */}
+      {isDigitalOnly ? (
+        <div className="border border-brass/40 bg-brass/5 px-6 py-5">
+          <p className="text-sm leading-relaxed text-ink">
+            Coșul tău conține doar produse digitale. După confirmarea comenzii vei
+            primi accesul la produse prin email — fără costuri de livrare.
+          </p>
+        </div>
+      ) : (
       <Section title="Metoda de livrare">
         <div className="grid gap-3 sm:grid-cols-2">
           <button
@@ -327,10 +341,11 @@ export function CheckoutForm({
           )}
           </>
         )}
-      </Section>
+        </Section>
+      )}
 
-      {/* Adresă de livrare (doar pentru curier) */}
-      {deliveryMethod === 'courier' && (
+      {/* Adresă de livrare (doar pentru curier si produse fizice) */}
+      {hasPhysical && deliveryMethod === 'courier' && (
         <Section title="Adresa de livrare">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Județ" htmlFor="county" required error={errors.county}>

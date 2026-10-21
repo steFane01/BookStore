@@ -59,8 +59,14 @@ export function BookIntro({ onEnter }: BookIntroProps) {
         opacity: phase === 'opening' ? 0 : 1,
       }}
     >
-      {/* Background wash — darkened paper */}
-      <div className="absolute inset-0 bg-[#241f19]" />
+      {/* Background — RV STUDIO welcome page artwork */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/welcomepage.jpeg')" }}
+        aria-hidden="true"
+      />
+      {/* Soft dark overlay for text legibility */}
+      <div className="absolute inset-0 bg-ink/55" aria-hidden="true" />
 
       {/* Book cover surface */}
       <div

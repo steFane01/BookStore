@@ -82,7 +82,10 @@ export function CartDrawer() {
             <div className="flex-1 overflow-y-auto px-6 py-5">
               <ul className="flex flex-col gap-6">
                 {items.map((item) => (
-                  <li key={item.bookId} className="flex gap-4">
+                  <li
+                    key={item.variantId ? `${item.bookId}__${item.variantId}` : item.bookId}
+                    className="flex gap-4"
+                  >
                     <div className="shrink-0">
                       <BookCover
                         book={{
@@ -107,10 +110,15 @@ export function CartDrawer() {
                             {item.title}
                           </p>
                           <p className="mt-0.5 text-xs text-ink-muted">{item.author}</p>
+                          {item.variantName && (
+                            <p className="mt-0.5 text-xs text-brass-dark">
+                              Variantă: {item.variantName}
+                            </p>
+                          )}
                         </div>
                         <button
                           type="button"
-                          onClick={() => removeItem(item.bookId)}
+                          onClick={() => removeItem(item.bookId, item.variantId)}
                           aria-label={`Elimină ${item.title} din coș`}
                           className="p-1 text-ink-muted transition-colors hover:text-oxblood"
                         >
@@ -122,7 +130,7 @@ export function CartDrawer() {
                         <QuantitySelector
                           size="sm"
                           value={item.quantity}
-                          onChange={(q) => setQuantity(item.bookId, q)}
+                          onChange={(q) => setQuantity(item.bookId, q, item.variantId)}
                         />
                         <span className="text-sm font-medium tabular-nums text-ink">
                           {formatPrice(item.price * item.quantity)}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { siteConfig } from '../config/site'
 import { useCart } from '../context/CartContext'
@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { MobileNavigation } from './MobileNavigation'
 import { CartDrawer } from './CartDrawer'
 import { AccountMenu } from './AccountMenu'
+import { BrandLogo } from './BrandLogo'
 import { IconCart, IconMenu, IconUser } from './icons'
 
 const navItems = [
@@ -15,18 +16,10 @@ const navItems = [
 ]
 
 export function Header() {
-  const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const { count, openCart } = useCart()
   const { isAuthenticated, isAdmin } = useAuth()
   const navigate = useNavigate()
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24)
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
 
   const onLogo = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -36,24 +29,21 @@ export function Header() {
 
   return (
     <>
-      <header
-        className={`fixed inset-x-0 top-0 z-40 transition-all duration-500 ${
-          scrolled
-            ? 'border-b border-ink/10 bg-paper-100/95 backdrop-blur'
-            : 'border-b border-transparent bg-transparent'
-        }`}
-      >
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-ink/10 bg-paper-100/95 backdrop-blur transition-colors">
         <div className="container-page flex h-16 items-center justify-between gap-4 md:h-20">
           {/* Brand */}
           <Link
             to="/"
             onClick={onLogo}
-            className="relative z-10 flex items-baseline gap-1 font-serif text-2xl tracking-tight text-ink"
+            className="relative z-10 flex items-center gap-2.5 font-serif text-2xl tracking-tight text-ink"
           >
-            {siteConfig.brandName}
-            <span className="hidden text-sm font-light italic text-brass-dark sm:inline">
-              — cărți & tipar
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-paper-200/70 ring-1 ring-ink/10 md:h-11 md:w-11">
+              {/* Logo image — graceful fallback so text brand stays visible. */}
+              <span className="h-full w-full overflow-hidden rounded-full">
+                <BrandLogo className="h-full w-full" />
+              </span>
             </span>
+            <span className="leading-none">{siteConfig.brandName}</span>
           </Link>
 
           {/* Desktop nav */}

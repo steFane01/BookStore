@@ -12,6 +12,11 @@ const BOOK_COLUMNS = `
   cover_placeholder_author AS "coverPlaceholderAuthor",
   cover_placeholder_theme AS "coverPlaceholderTheme",
   gallery, isbn, pages, year, language, format, category,
+  category_id AS "categoryId",
+  product_type AS "productType",
+  variants, digital_file_url AS "digitalFileUrl",
+  digital_access AS "digitalAccess",
+  shipping_info AS "shippingInfo",
   featured, status, tags`
 
 /**
@@ -47,6 +52,12 @@ function rowToBook(row) {
     language: row.language ?? undefined,
     format: row.format ?? undefined,
     category: row.category ?? undefined,
+    categoryId: row.categoryId ?? undefined,
+    productType: row.productType ?? 'physical',
+    variants: row.variants ?? [],
+    digitalFileUrl: row.digitalFileUrl ?? undefined,
+    digitalAccess: row.digitalAccess ?? undefined,
+    shippingInfo: row.shippingInfo ?? {},
     featured: row.featured,
     status: row.status,
     tags: row.tags ?? [],
@@ -85,6 +96,12 @@ function bodyToColumns(body) {
     language: body.language ?? null,
     format: body.format ?? null,
     category: body.category || null,
+    category_id: body.categoryId || null,
+    product_type: body.productType === 'digital' ? 'digital' : 'physical',
+    variants: Array.isArray(body.variants) ? body.variants : [],
+    digital_file_url: body.digitalFileUrl ?? null,
+    digital_access: body.digitalAccess ?? null,
+    shipping_info: body.shippingInfo && typeof body.shippingInfo === 'object' ? body.shippingInfo : {},
     featured: Boolean(body.featured),
     status: body.status === 'active' ? 'active' : 'draft',
     tags: Array.isArray(body.tags) ? body.tags : [],
@@ -92,13 +109,21 @@ function bodyToColumns(body) {
 }
 
 /** GET /api/books — public active catalog. */
-booksRouter.get('/', async (_req, res) => {
+booksRouter.get('/', async (req, res) => {
+  const category = typeof req.query.categorie === 'string' ? req.query.categorie.trim() : ''
   try {
+    const params = []
+    let where = `status = 'active'`
+    if (category) {
+      params.push(category)
+      where += ` AND (category_id = $${params.length} OR LOWER(category) = LOWER($${params.length}))`
+    }
     const { rows } = await pool.query(
       `SELECT ${BOOK_COLUMNS}
        FROM books
-       WHERE status = 'active'
+       WHERE ${where}
        ORDER BY featured DESC, title ASC`,
+      params,
     )
     res.json(rows.map(rowToBook))
   } catch (err) {
@@ -113,6 +138,18 @@ booksRouter.get('/all', requireAdmin, async (_req, res) => {
       `SELECT ${BOOK_COLUMNS} FROM books ORDER BY featured DESC, created_at DESC`,
     )
     res.json(rows.map(rowToBook))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/** GET /api/books/categories — the product categories (before /:id). */
+booksRouter.get('/categories', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, name, slug, blurb, sort FROM product_categories ORDER BY sort ASC',
+    )
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -144,14 +181,18 @@ booksRouter.post('/', requireAdmin, async (req, res) => {
       `INSERT INTO books
          (id, title, author, short_description, description, excerpt, price, stock,
           cover_src, cover_alt, gallery, isbn, pages, year, language, format,
-          category, featured, status, tags)
+          category, category_id, product_type, variants, digital_file_url,
+          digital_access, shipping_info, featured, status, tags)
        VALUES
-         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+         ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+          $20,$21,$22,$23,$24,$25,$26)
        RETURNING ${BOOK_COLUMNS}`,
       [
         id, c.title, c.author, c.short_description, c.description, c.excerpt,
         c.price, c.stock, c.cover_src, c.cover_alt, c.gallery, c.isbn, c.pages,
-        c.year, c.language, c.format, c.category, c.featured, c.status, c.tags,
+        c.year, c.language, c.format, c.category, c.category_id, c.product_type,
+        c.variants, c.digital_file_url, c.digital_access, c.shipping_info,
+        c.featured, c.status, c.tags,
       ],
     )
     res.status(201).json(rowToBook(rows[0]))
@@ -172,14 +213,17 @@ booksRouter.put('/:id', requireAdmin, async (req, res) => {
       `UPDATE books SET
          title=$1, author=$2, short_description=$3, description=$4, excerpt=$5,
          price=$6, stock=$7, cover_src=$8, cover_alt=$9, gallery=$10, isbn=$11,
-         pages=$12, year=$13, language=$14, format=$15, category=$16, featured=$17,
-         status=$18, tags=$19
-       WHERE id=$20
+         pages=$12, year=$13, language=$14, format=$15, category=$16,
+         category_id=$17, product_type=$18, variants=$19, digital_file_url=$20,
+         digital_access=$21, shipping_info=$22, featured=$23, status=$24, tags=$25
+       WHERE id=$26
        RETURNING ${BOOK_COLUMNS}`,
       [
         c.title, c.author, c.short_description, c.description, c.excerpt,
         c.price, c.stock, c.cover_src, c.cover_alt, c.gallery, c.isbn, c.pages,
-        c.year, c.language, c.format, c.category, c.featured, c.status, c.tags,
+        c.year, c.language, c.format, c.category, c.category_id, c.product_type,
+        c.variants, c.digital_file_url, c.digital_access, c.shipping_info,
+        c.featured, c.status, c.tags,
         req.params.id,
       ],
     )
