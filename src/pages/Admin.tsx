@@ -131,7 +131,7 @@ export default function Admin() {
         </div>
 
         <div className="mt-8">
-          {tab === 'dashboard' && <DashboardTab stats={stats} />}
+          {tab === 'dashboard' && <DashboardTab stats={stats} books={books} categories={categories} />}
           {tab === 'catalog' && (
             <CatalogTab books={books} categories={categories} onRefresh={refreshBooks} />
           )}
@@ -145,6 +145,8 @@ export default function Admin() {
 
 function DashboardTab({
   stats,
+  books,
+  categories,
 }: {
   stats: {
     totalBooks: number
@@ -153,6 +155,8 @@ function DashboardTab({
     pendingOrders: number
     revenue: number
   }
+  books: Book[]
+  categories: ProductCategory[]
 }) {
   const cards = [
     { label: 'Cărți în catalog', value: String(stats.totalBooks), icon: IconBook },
@@ -160,6 +164,22 @@ function DashboardTab({
     { label: 'Exemplare în stoc', value: String(stats.totalStock), icon: IconBook },
     { label: 'Comenzi în așteptare', value: String(stats.pendingOrders), icon: IconCart },
   ]
+
+  // Break the catalog down by category so the admin can see each one separately.
+  const byCategory = categories
+    .map((c) => {
+      const items = books.filter((b) => b.categoryId === c.id)
+      return {
+        category: c,
+        total: items.length,
+        active: items.filter((b) => b.status === 'active').length,
+      }
+    })
+    .sort((a, b) => (a.category.sort ?? 0) - (b.category.sort ?? 0))
+  // Books that have no recognised category ID fall back to their legacy label.
+  const uncategorized = books.filter(
+    (b) => !b.categoryId || !categories.some((c) => c.id === b.categoryId),
+  )
 
   return (
     <div>
@@ -173,9 +193,48 @@ function DashboardTab({
         ))}
       </div>
 
-      <div className="mt-8 border border-ink/10 bg-paper-50 p-6">
-        <p className="text-sm uppercase tracking-wider text-ink-muted">Valoare totală comenzi</p>
-        <p className="mt-2 font-serif text-3xl text-ink">{formatPrice(stats.revenue)}</p>
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="border border-ink/10 bg-paper-50 p-6">
+          <p className="text-sm uppercase tracking-wider text-ink-muted">
+            Cărți pe categorie
+          </p>
+          <ul className="mt-4 space-y-3">
+            {byCategory.map(({ category, total, active }) => (
+              <li
+                key={category.id}
+                className="flex items-center justify-between gap-4 border-b border-ink/10 pb-3 last:border-0"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-serif text-ink">
+                    {category.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-ink-muted">
+                    {active} active
+                  </span>
+                  <span className="font-serif text-lg text-ink">{total}</span>
+                </div>
+              </li>
+            ))}
+            {uncategorized.length > 0 && (
+              <li className="flex items-center justify-between gap-4 border-b border-ink/10 pb-3 last:border-0">
+                <span className="font-serif text-ink">Fără categorie</span>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-ink-muted">—</span>
+                  <span className="font-serif text-lg text-ink">{uncategorized.length}</span>
+                </div>
+              </li>
+            )}
+          </ul>
+        </div>
+
+        <div className="border border-ink/10 bg-paper-50 p-6">
+          <p className="text-sm uppercase tracking-wider text-ink-muted">
+            Valoare totală comenzi
+          </p>
+          <p className="mt-2 font-serif text-3xl text-ink">{formatPrice(stats.revenue)}</p>
+        </div>
       </div>
     </div>
   )
@@ -194,6 +253,27 @@ function CatalogTab({
   const [editing, setEditing] = useState<Book | null | 'new'>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+
+  const categoryName = (b: Book): string => {
+    if (b.categoryId) {
+      const cat = categories.find((c) => c.id === b.categoryId)
+      if (cat) return cat.name
+    }
+    return b.category?.trim() || 'Fără categorie'
+  }
+
+  const visibleBooks = useMemo(
+    () =>
+      categoryFilter === 'all'
+        ? books
+        : books.filter((b) => b.categoryId === categoryFilter),
+    [books, categoryFilter],
+  )
+
+  const countFor = (id: string | 'all') =>
+    id === 'all' ? books.length : books.filter((b) => b.categoryId === id).length
 
   const remove = async (id: string) => {
     setBusy(id)
@@ -214,6 +294,12 @@ function CatalogTab({
       <div className="mb-6 flex items-center justify-between">
         <p className="text-sm text-ink-muted">
           {books.length} titluri în catalog
+          {categoryFilter !== 'all' && (
+            <span className="text-ink">
+              {' '}
+              · {visibleBooks.length} în „{categories.find((c) => c.id === categoryFilter)?.name ?? categoryFilter}”
+            </span>
+          )}
         </p>
         <button
           type="button"
@@ -223,6 +309,37 @@ function CatalogTab({
           <IconPlus className="h-4 w-4" />
           Adaugă carte
         </button>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setCategoryFilter('all')}
+          className={`px-3 py-1.5 text-xs uppercase tracking-wider transition-colors ${
+            categoryFilter === 'all'
+              ? 'bg-ink text-paper-50'
+              : 'border border-ink/15 text-ink-muted hover:text-ink'
+          }`}
+        >
+          Toate ({countFor('all')})
+        </button>
+        {categories
+          .slice()
+          .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
+          .map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoryFilter(categoryFilter === c.id ? 'all' : c.id)}
+              className={`px-3 py-1.5 text-xs uppercase tracking-wider transition-colors ${
+                categoryFilter === c.id
+                  ? 'bg-ink text-paper-50'
+                  : 'border border-ink/15 text-ink-muted hover:text-ink'
+              }`}
+            >
+              {c.name} ({countFor(c.id)})
+            </button>
+          ))}
       </div>
 
       {actionError && (
@@ -237,6 +354,7 @@ function CatalogTab({
           <thead>
             <tr className="border-b border-ink/10 bg-paper-200/50 text-xs uppercase tracking-wider text-ink-muted">
               <th className="px-4 py-3">Titlu</th>
+              <th className="px-4 py-3">Categorie</th>
               <th className="px-4 py-3">Autor</th>
               <th className="px-4 py-3">Preț</th>
               <th className="px-4 py-3">Stoc</th>
@@ -245,9 +363,14 @@ function CatalogTab({
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/10">
-            {books.map((b) => (
+            {visibleBooks.map((b) => (
               <tr key={b.id} className="text-sm text-ink">
                 <td className="px-4 py-3 font-serif">{b.title}</td>
+                <td className="px-4 py-3">
+                  <span className="inline-block rounded-full border border-ink/15 px-2.5 py-0.5 text-xs text-ink-muted">
+                    {categoryName(b)}
+                  </span>
+                </td>
                 <td className="px-4 py-3 text-ink-light">{b.author}</td>
                 <td className="px-4 py-3">{formatPrice(b.price)}</td>
                 <td className="px-4 py-3">{b.stock}</td>
@@ -284,10 +407,12 @@ function CatalogTab({
                 </td>
               </tr>
             ))}
-            {books.length === 0 && (
+            {visibleBooks.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-ink-muted">
-                  Catalogul este gol.
+                <td colSpan={7} className="px-4 py-8 text-center text-ink-muted">
+                  {categoryFilter === 'all'
+                    ? 'Catalogul este gol.'
+                    : 'Nu există titluri în această categorie.'}
                 </td>
               </tr>
             )}
