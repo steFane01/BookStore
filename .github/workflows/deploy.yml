@@ -1,0 +1,68 @@
+# -----------------------------------------------------------------------------
+# Deploy automat în producție — RV STUDIO
+#
+# Rulează după ce workflow-ul „CI / CD” (ci.yml) s-a terminat cu succes pe main.
+# Se poate rula și manual din tab-ul Actions (workflow_dispatch).
+#
+# Necesită aceste GitHub Secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST      IP-ul sau domeniul serverului
+#   DEPLOY_USER      userul SSH (ex. deploy)
+#   DEPLOY_SSH_KEY   cheia privată SSH (conținutul fișierului, nu calea)
+#   DEPLOY_PATH      calea repo-ului pe server (ex. /opt/rvstudio/books)
+#
+# Pe server trebuie să existe deja:
+#   - repo clonat în DEPLOY_PATH
+#   - fișierul .env completat (nu este în git)
+#   - Docker + Docker Compose instalate
+#
+# Dacă folosești Dokploy/Coolify în locul acestui workflow, șterge acest fișier.
+# -----------------------------------------------------------------------------
+
+name: Deploy production
+
+on:
+  workflow_run:
+    workflows: ["CI / CD"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: SSH deploy
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+
+            # Codul de pe server urmează exact branch-ul main.
+            # .env este ignorat de git, deci rămâne neatins.
+            git fetch --prune origin
+            git reset --hard origin/main
+
+            # Rebuild + restart fără a șterge volumele (DB + uploads).
+            docker compose -f docker-compose.prod.yml up -d --build
+            docker image prune -f
+
+            # Healthcheck — schimbă portul dacă FRONTEND_PORT nu este 8080.
+            sleep 5
+            curl -fsS "http://127.0.0.1:8080/api/health" >/dev/null
+            echo "Deploy OK"

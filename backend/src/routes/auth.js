@@ -82,23 +82,26 @@ authRouter.post('/register', async (req, res) => {
  * Verify credentials against `users` and return a session token.
  */
 authRouter.post('/login', async (req, res) => {
-  const email = cleanString(req.body?.email, 200).toLowerCase()
+  // Accepted identifier: the account email, or (for admins) the display name.
+  const identifier = cleanString(req.body?.email ?? req.body?.identifier, 200).toLowerCase()
   const password = typeof req.body?.password === 'string' ? req.body.password : ''
-  if (!email || !password) {
-    return res.status(422).json({ error: 'Emailul și parola sunt obligatorii.' })
+  if (!identifier || !password) {
+    return res.status(422).json({ error: 'Emailul/numele de utilizator și parola sunt obligatorii.' })
   }
   try {
     const { rows } = await pool.query(
-      'SELECT id, name, email, role, password_hash FROM users WHERE email = $1',
-      [email],
+      `SELECT id, name, email, role, password_hash FROM users
+       WHERE lower(email) = $1 OR (role = 'admin' AND lower(name) = $1)
+       LIMIT 1`,
+      [identifier],
     )
     const row = rows[0]
     if (!row || !row.password_hash) {
-      return res.status(401).json({ error: 'Email sau parolă incorecte.' })
+      return res.status(401).json({ error: 'Email/nume de utilizator sau parolă incorecte.' })
     }
     const ok = await bcrypt.compare(password, row.password_hash)
     if (!ok) {
-      return res.status(401).json({ error: 'Email sau parolă incorecte.' })
+      return res.status(401).json({ error: 'Email/nume de utilizator sau parolă incorecte.' })
     }
     return res.json({ user: toUser(row), token: signToken(row) })
   } catch (err) {

@@ -8,6 +8,7 @@ Full-stack Docker setup for the bookstore: PostgreSQL, a Node/Express backend
 ```bash
 # (optional) create your own env — defaults are fine for local dev
 cp .env.example .env
+# pentru un cont de admin, setează ADMIN_ACCOUNTS în .env (vezi secțiunea „Admin accounts")
 
 # build & start all services
 docker compose up --build
@@ -15,6 +16,9 @@ docker compose up --build
 # open the app
 open http://localhost:8080
 ```
+
+> **Producție:** pașii completi (domeniu, VPS, HTTPS, auto-deploy din Git,
+> credențiale, backup, monitorizare) sunt în [`DEPLOY.md`](./DEPLOY.md).
 
 The first `db` container boot applies `sql/init/01_schema.sql` then
 `sql/init/02_seed.sql` automatically (filename order, only on an empty volume).
@@ -101,15 +105,29 @@ The `backend/` image serves the real Express API backed by Postgres:
 Every public write endpoint is rate limited; auth/admin/order scoping is enforced
 server-side. `/api/cart` and `/api/users` remain stubs.
 
-## Admin account
+## Admin accounts
 
-No credentials are committed anywhere. At startup the backend creates (or
-updates) the owner account from `ADMIN_EMAIL` + `ADMIN_PASSWORD`
-(`backend/src/bootstrap.js`). Set them in `.env`, restart the backend, then sign
-in at `/autentificare`. You can change the password any time from
-**Cont → Securitate**. The env password is only the *initial* one — it never
-overwrites a password changed in the UI. To force it back from `.env`, set
-`ADMIN_RESET_PASSWORD=1`, restart once, then set it back to `0`.
+No credentials are committed anywhere. At startup the backend creates or
+updates every administrator from `ADMIN_ACCOUNTS` (`backend/src/bootstrap.js`):
+
+```dotenv
+ADMIN_ACCOUNTS=ralucarv@rvstudio.ro|parola-puternica|RalucaRV;stefanlucian@rvstudio.ro|alta-parola|StefanLucian
+```
+
+Format: `email|password|Name` entries separated by `;` (no spaces around the
+values). The legacy single-account `ADMIN_EMAIL` + `ADMIN_PASSWORD` +
+`ADMIN_NAME` variables still work and are appended to the list when set.
+
+Admins can sign in at `/autentificare` with their **email or their display name**
+(e.g. `RalucaRV`) plus the password. The env password is only the *initial* one:
+it never overwrites a password changed from **Cont → Securitate**. To force all
+env passwords back, set `ADMIN_RESET_PASSWORD=1`, restart once, then set it back
+to `0`. Production refuses to start when neither `ADMIN_ACCOUNTS` nor the legacy
+pair is configured.
+
+To remove an old admin account, delete it from the `users` table (or from a SQL
+client): `DELETE FROM users WHERE role = 'admin' AND email = '...';`. The
+bootstrap never deletes accounts, it only creates/promotes the configured ones.
 
 ## Mail service
 
@@ -203,7 +221,7 @@ and required secrets (the stack refuses to start if one is missing):
 ```bash
 cp .env.example .env       # completează parole, JWT_SECRET, SMTP, PUBLIC_URL
 # JWT_SECRET: openssl rand -hex 32
-# POSTGRES_PASSWORD / ADMIN_PASSWORD: parole lungi, unice
+# POSTGRES_PASSWORD / parolele din ADMIN_ACCOUNTS: parole lungi, unice
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 

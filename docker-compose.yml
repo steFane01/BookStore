@@ -49,7 +49,8 @@ services:
       NODE_ENV: ${NODE_ENV:-development}
       TRUST_PROXY: "1"
       JWT_SECRET: ${JWT_SECRET:-libraria-dev-secret-change-me}
-      # Owner account created/updated at startup (backend/src/bootstrap.js).
+      # Owner accounts created/updated at startup (backend/src/bootstrap.js).
+      ADMIN_ACCOUNTS: ${ADMIN_ACCOUNTS:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_NAME: ${ADMIN_NAME:-Administrator}

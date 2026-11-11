@@ -70,5 +70,14 @@ export function validateRuntimeConfig() {
   if (!process.env.SMTP_HOST) {
     problems.push('SMTP_HOST nu este setat — emailurile de comandă/resetare nu vor fi livrate.')
   }
+  const hasAdminList = Boolean(String(process.env.ADMIN_ACCOUNTS || '').trim())
+  const hasLegacyAdmin =
+    Boolean(String(process.env.ADMIN_EMAIL || '').trim()) &&
+    Boolean(String(process.env.ADMIN_PASSWORD || ''))
+  if (!hasAdminList && !hasLegacyAdmin) {
+    problems.push(
+      'Niciun cont de administrator configurat: setează ADMIN_ACCOUNTS (sau ADMIN_EMAIL + ADMIN_PASSWORD) în .env.',
+    )
+  }
   return problems
 }

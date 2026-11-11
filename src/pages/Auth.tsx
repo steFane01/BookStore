@@ -102,15 +102,19 @@ export default function Auth() {
               </FormField>
             )}
 
-            <FormField label="Email" htmlFor="auth-email" required>
+            <FormField
+              label={mode === 'login' ? 'Email sau nume de utilizator (admin)' : 'Email'}
+              htmlFor="auth-email"
+              required
+            >
               <input
                 id="auth-email"
-                type="email"
+                type={mode === 'login' ? 'text' : 'email'}
                 className="field"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                placeholder="adresa@email.ro"
+                autoComplete={mode === 'login' ? 'username' : 'email'}
+                placeholder={mode === 'login' ? 'adresa@email.ro sau RalucaRV' : 'adresa@email.ro'}
               />
             </FormField>
 
