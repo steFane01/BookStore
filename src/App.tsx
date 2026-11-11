@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { SettingsProvider } from './context/SettingsContext'
 import { CartProvider } from './context/CartContext'
 import { Header } from './components/Header'
 import { Footer } from './components/Footer'
@@ -15,6 +16,8 @@ import Admin from './pages/Admin'
 import About from './pages/About'
 import Contact from './pages/Contact'
 import ResetPassword from './pages/ResetPassword'
+import Legal from './pages/Legal'
+import OrderTracking from './pages/OrderTracking'
 
 /**
  * Scrolls to the top whenever the route changes. This keeps the fixed header
@@ -30,8 +33,9 @@ function ScrollToTop() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
+    <SettingsProvider>
+      <AuthProvider>
+        <CartProvider>
         <ScrollToTop />
         <div className="flex min-h-screen flex-col">
           <Header />
@@ -47,39 +51,18 @@ export default function App() {
               <Route path="/admin" element={<Admin />} />
               <Route path="/despre" element={<About />} />
               <Route path="/contact" element={<Contact />} />
-              <Route path="/termeni" element={<SimplePage title="Termeni și condiții" />} />
-              <Route path="/confidentialitate" element={<SimplePage title="Politica de confidențialitate" />} />
-              <Route path="/cookies" element={<SimplePage title="Politica de cookies" />} />
+              <Route path="/termeni" element={<Legal kind="terms" />} />
+              <Route path="/confidentialitate" element={<Legal kind="privacy" />} />
+              <Route path="/cookies" element={<Legal kind="cookies" />} />
+              <Route path="/urmarire-comanda" element={<OrderTracking />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </main>
           <Footer />
         </div>
-      </CartProvider>
-    </AuthProvider>
-  )
-}
-
-function SimplePage({ title }: { title: string }) {
-  return (
-    <div className="pt-20 md:pt-24">
-      <div className="container-page max-w-2xl py-16">
-        <h1 className="serif-display text-4xl text-ink">{title}</h1>
-        <div className="mt-6 flex flex-col gap-4 leading-relaxed text-ink-muted">
-          <p>
-            Această pagină este doar demonstrativă în această versiune a sitului.
-            Într-o implementare completă, aici ar apărea textul legal relevant.
-          </p>
-          <p>
-            Dacă ai întrebări legate de această politică, ne poți contacta la{' '}
-            <a href="mailto:bun@libraria.ro" className="text-brass-dark underline underline-offset-2">
-              bun@libraria.ro
-            </a>
-            .
-          </p>
-        </div>
-      </div>
-    </div>
+        </CartProvider>
+      </AuthProvider>
+    </SettingsProvider>
   )
 }
 

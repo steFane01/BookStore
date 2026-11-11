@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { siteConfig } from '../config/site'
+import { useSettings } from '../context/SettingsContext'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { MobileNavigation } from './MobileNavigation'
@@ -20,6 +20,15 @@ export function Header() {
   const { count, openCart } = useCart()
   const { isAuthenticated, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const { settings } = useSettings()
+  const [query, setQuery] = useState('')
+
+  const onSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    const term = query.trim()
+    navigate(term ? `/?q=${encodeURIComponent(term)}` : '/')
+    setMobileOpen(false)
+  }
 
   const onLogo = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -43,7 +52,7 @@ export function Header() {
                 <BrandLogo className="h-full w-full" />
               </span>
             </span>
-            <span className="leading-none">{siteConfig.brandName}</span>
+            <span className="leading-none">{settings.brandName}</span>
           </Link>
 
           {/* Desktop nav */}
@@ -63,6 +72,21 @@ export function Header() {
               </NavLink>
             ))}
           </nav>
+
+          {/* Search */}
+          <form onSubmit={onSearch} className="hidden flex-1 items-center justify-end gap-2 lg:flex" role="search">
+            <label htmlFor="site-search" className="sr-only">
+              Caută în magazin
+            </label>
+            <input
+              id="site-search"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Caută un titlu sau un autor…"
+              className="w-full max-w-xs border border-ink/15 bg-transparent px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-brass focus:outline-none"
+            />
+          </form>
 
           {/* Actions */}
           <div className="flex items-center gap-1 sm:gap-2">

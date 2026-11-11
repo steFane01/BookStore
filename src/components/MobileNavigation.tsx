@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useEscape, useLockBody } from '../hooks/useEscape'
-import { siteConfig } from '../config/site'
+import { useSettings } from '../context/SettingsContext'
 import { IconClose, IconUser, IconCart } from './icons'
 
 interface MobileNavigationProps {
@@ -25,6 +25,7 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
   const { isAuthenticated, isAdmin } = useAuth()
   const { openCart } = useCart()
   const navigate = useNavigate()
+  const { settings } = useSettings()
 
   useEscape(onClose, open)
   useLockBody(open)
@@ -62,7 +63,7 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
         aria-label="Meniu"
       >
         <div className="container-page flex h-16 items-center justify-between pt-2">
-          <span className="font-serif text-2xl text-ink">{siteConfig.brandName}</span>
+          <span className="font-serif text-2xl text-ink">{settings.brandName}</span>
           <button
             type="button"
             onClick={onClose}

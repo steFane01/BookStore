@@ -65,6 +65,9 @@ jobs:
       - name: Syntax check server
         run: node --check src/server.js      # fail if there is a syntax error
 
+      - name: Unit tests
+        run: npm test                        # node --test (pricing, escaping, settings)
+
   # --- Job 3: build the Docker images ---------------------------------------
   # This proves your Dockerfiles work on a clean machine. It runs only after
   # the two jobs above pass (the 'needs' line).

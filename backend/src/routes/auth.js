@@ -2,10 +2,16 @@ import { Router } from 'express'
 import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { pool } from '../db.js'
-import { signToken } from '../auth.js'
-import { sendMail, getPublicUrl } from '../mailer.js'
+import { requireAuth, signToken } from '../auth.js'
+import { sendMail } from '../mailer.js'
+import { getPublicUrl } from '../config.js'
+import { getSiteName } from '../settings.js'
+import { ApiError, isUniqueViolation, serverError } from '../lib/errors.js'
+import { cleanString, escapeHtml, isEmail } from '../lib/text.js'
 
 export const authRouter = Router()
+
+const MIN_PASSWORD_LENGTH = 8
 
 /** Map a users row to the public `User` JSON shape the frontend expects. */
 function toUser(row) {
@@ -17,42 +23,57 @@ function toUser(row) {
  * Create a new customer account in the `users` table.
  */
 authRouter.post('/register', async (req, res) => {
-  const { name, email, password } = req.body || {}
+  const name = cleanString(req.body?.name, 120)
+  const email = cleanString(req.body?.email, 200).toLowerCase()
+  const password = typeof req.body?.password === 'string' ? req.body.password : ''
+
   if (!name || !email || !password) {
     return res.status(422).json({ error: 'Numele, emailul și parola sunt obligatorii.' })
   }
-  if (typeof password !== 'string' || password.length < 6) {
-    return res.status(422).json({ error: 'Parola trebuie să aibă cel puțin 6 caractere.' })
+  if (!isEmail(email)) {
+    return res.status(422).json({ error: 'Adresa de email nu este validă.' })
   }
-  const normalizedEmail = String(email).trim().toLowerCase()
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return res
+      .status(422)
+      .json({ error: `Parola trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.` })
+  }
 
   try {
-    const exists = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail])
-    if (exists.rowCount > 0) {
-      return res.status(409).json({ error: 'Există deja un cont cu acest email.' })
-    }
     const hash = await bcrypt.hash(password, 10)
     const { rows } = await pool.query(
       `INSERT INTO users (name, email, password_hash, role)
        VALUES ($1, $2, $3, 'customer')
        RETURNING id, name, email, role`,
-      [String(name).trim(), normalizedEmail, hash],
+      [name, email, hash],
     )
     const user = toUser(rows[0])
-    // Non-fatal: send a welcome/confirm email if mail is configured.
+    const brand = await getSiteName()
+
+    // Non-fatal: send a welcome email if mail is configured.
     try {
       await sendMail({
         to: user.email,
-        subject: 'Bine ai venit la Librăria',
-        text: `Salut, ${user.name}!\n\nContul tău la Librăria a fost creat cu succes.\n\nCu drag, echipa Librăria.`,
-        html: `<p>Salut, <strong>${user.name}</strong>!</p><p>Contul tău la <strong>Librăria</strong> a fost creat cu succes.</p>`,
+        subject: `Bine ai venit la ${brand}`,
+        text:
+          `Salut, ${user.name}!\n\n` +
+          `Contul tău la ${brand} a fost creat cu succes.\n\n` +
+          `Cu drag, echipa ${brand}.`,
+        html:
+          `<p>Salut, <strong>${escapeHtml(user.name)}</strong>!</p>` +
+          `<p>Contul tău la <strong>${escapeHtml(brand)}</strong> a fost creat cu succes.</p>` +
+          `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`,
       })
     } catch (mailErr) {
       console.warn('[libraria] welcome email skipped:', mailErr.message)
     }
+
     return res.status(201).json({ user, token: signToken(rows[0]) })
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    if (isUniqueViolation(err)) {
+      return res.status(409).json({ error: 'Există deja un cont cu acest email.' })
+    }
+    return serverError(res, err, 'register')
   }
 })
 
@@ -61,79 +82,126 @@ authRouter.post('/register', async (req, res) => {
  * Verify credentials against `users` and return a session token.
  */
 authRouter.post('/login', async (req, res) => {
-  const { email, password } = req.body || {}
+  const email = cleanString(req.body?.email, 200).toLowerCase()
+  const password = typeof req.body?.password === 'string' ? req.body.password : ''
   if (!email || !password) {
     return res.status(422).json({ error: 'Emailul și parola sunt obligatorii.' })
   }
-  const normalizedEmail = String(email).trim().toLowerCase()
   try {
     const { rows } = await pool.query(
       'SELECT id, name, email, role, password_hash FROM users WHERE email = $1',
-      [normalizedEmail],
+      [email],
     )
     const row = rows[0]
     if (!row || !row.password_hash) {
       return res.status(401).json({ error: 'Email sau parolă incorecte.' })
     }
-    const ok = await bcrypt.compare(String(password), row.password_hash)
+    const ok = await bcrypt.compare(password, row.password_hash)
     if (!ok) {
       return res.status(401).json({ error: 'Email sau parolă incorecte.' })
     }
-    const user = toUser(row)
-    return res.json({ user, token: signToken(row) })
+    return res.json({ user: toUser(row), token: signToken(row) })
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    return serverError(res, err, 'login')
   }
 })
 
 /**
  * GET /api/auth/me
- * Resolve the current session (used to restore a logged-in user on reload).
+ * Resolve the current session from the database (so a role change or a deleted
+ * account is reflected immediately, not only when the token expires).
  */
-authRouter.get('/me', async (req, res) => {
-  const header = req.headers.authorization || ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null
-  if (!token) return res.status(401).json({ error: 'Neautorizat.' })
+authRouter.get('/me', requireAuth, async (req, res) => {
   try {
-    const { verify } = await import('jsonwebtoken')
-    const payload = verify(token, process.env.JWT_SECRET || 'libraria-dev-secret-change-me')
-    const { rows } = await pool.query(
-      'SELECT id, name, email, role FROM users WHERE id = $1',
-      [payload.sub],
-    )
-    if (rows.length === 0) return res.status(404).json({ error: 'Contul nu mai există.' })
+    const { rows } = await pool.query('SELECT id, name, email, role FROM users WHERE id = $1', [
+      req.user.id,
+    ])
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'Sesiune invalidă.' })
+    }
     return res.json({ user: toUser(rows[0]) })
-  } catch {
-    return res.status(401).json({ error: 'Sesiune expirată sau nevalidă.' })
+  } catch (err) {
+    return serverError(res, err, 'me')
+  }
+})
+
+/**
+ * PATCH /api/auth/me
+ * Update the signed-in customer's profile (display name).
+ */
+authRouter.patch('/me', requireAuth, async (req, res) => {
+  const name = cleanString(req.body?.name, 120)
+  if (!name) {
+    return res.status(422).json({ error: 'Numele este obligatoriu.' })
+  }
+  try {
+    const { rows } = await pool.query(
+      'UPDATE users SET name = $1 WHERE id = $2 RETURNING id, name, email, role',
+      [name, req.user.id],
+    )
+    if (rows.length === 0) return res.status(404).json({ error: 'Contul nu a fost găsit.' })
+    return res.json({ user: toUser(rows[0]) })
+  } catch (err) {
+    return serverError(res, err, 'update-profile')
+  }
+})
+
+/**
+ * POST /api/auth/change-password
+ * Change the password of the signed-in account (requires the current one).
+ */
+authRouter.post('/change-password', requireAuth, async (req, res) => {
+  const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : ''
+  const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : ''
+  if (!currentPassword || !newPassword) {
+    return res.status(422).json({ error: 'Parola actuală și parola nouă sunt obligatorii.' })
+  }
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    return res
+      .status(422)
+      .json({ error: `Parola nouă trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.` })
+  }
+  if (newPassword === currentPassword) {
+    return res.status(422).json({ error: 'Parola nouă trebuie să fie diferită de cea actuală.' })
+  }
+  try {
+    const { rows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id])
+    const row = rows[0]
+    if (!row?.password_hash) {
+      throw new ApiError(400, 'Contul nu are o parolă setată.')
+    }
+    const ok = await bcrypt.compare(currentPassword, row.password_hash)
+    if (!ok) {
+      return res.status(400).json({ error: 'Parola actuală este incorectă.' })
+    }
+    const hash = await bcrypt.hash(newPassword, 10)
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id])
+    await pool.query('UPDATE password_resets SET used = true WHERE user_id = $1 AND used = false', [
+      req.user.id,
+    ])
+    return res.json({ ok: true })
+  } catch (err) {
+    return serverError(res, err, 'change-password')
   }
 })
 
 /**
  * POST /api/auth/request-password-reset
- *
- * Sends a password-reset email containing a real, clickable link to the
- * frontend reset page (`/resetare-parola/:token`). The token is stored (as a
- * SHA-256 hash) in the `password_resets` table with an expiry. Always resolves
- * with `{ ok: true }` to avoid leaking which emails have accounts.
+ * Send a single-use reset link to the address, if the account exists. The reply
+ * is always `{ ok: true }` so the endpoint cannot be used to enumerate accounts.
  */
 authRouter.post('/request-password-reset', async (req, res) => {
-  const email = String((req.body || {}).email ?? '').trim().toLowerCase()
-  res.setHeader('Content-Type', 'application/json')
-
-  if (!email) {
-    return res.json({ ok: true })
+  const email = cleanString(req.body?.email, 200).toLowerCase()
+  if (!isEmail(email)) {
+    return res.status(422).json({ error: 'Adresa de email nu este validă.' })
   }
-
   try {
-    // Look up the account WITHOUT revealing whether it exists.
-    const { rows } = await pool.query('SELECT id, name FROM users WHERE email = $1', [email])
+    const { rows } = await pool.query('SELECT id, name, email FROM users WHERE email = $1', [email])
     const user = rows[0]
     if (user) {
-      // Single-use token, stored hashed so a DB leak isn't a usable token.
       const token = crypto.randomBytes(32).toString('hex')
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
-      // Invalidate any previous reset tokens for this user.
       await pool.query(
         `INSERT INTO password_resets (user_id, token_hash, expires_at)
          SELECT $1, $2, $3
@@ -143,56 +211,56 @@ authRouter.post('/request-password-reset', async (req, res) => {
          )`,
         [user.id, tokenHash, expiresAt],
       )
+
+      const brand = await getSiteName()
       const resetUrl = `${getPublicUrl()}/resetare-parola/${token}`
       try {
         await sendMail({
           to: email,
-          subject: 'Resetarea parolei — Librăria',
+          subject: `Resetarea parolei — ${brand}`,
           text:
             `Salut, ${user.name}!\n\n` +
-            `Ai solicitat resetarea parolei contului tău de la Librăria.\n` +
-            `Apasă pe linkul de mai jos pentru a alege o parolă nouă (valabil 1 oră):\n\n` +
+            `Ai solicitat resetarea parolei contului tău de la ${brand}.\n` +
+            `Deschide linkul de mai jos pentru a alege o parolă nouă (valabil 1 oră):\n\n` +
             `${resetUrl}\n\n` +
             `Dacă nu ai fost tu, poți ignora acest email.\n\n` +
-            `Cu drag, echipa Librăria.`,
+            `Cu drag, echipa ${brand}.`,
           html:
-            `<p>Salut, <strong>${user.name}</strong>!</p>` +
-            `<p>Ai solicitat resetarea parolei contului tău de la <strong>Librăria</strong>.</p>` +
-            `<p><a href="${resetUrl}">Alege o parolă nouă aici</a> (linkul este valabil 1 oră).</p>` +
+            `<p>Salut, <strong>${escapeHtml(user.name)}</strong>!</p>` +
+            `<p>Ai solicitat resetarea parolei contului tău de la <strong>${escapeHtml(brand)}</strong>.</p>` +
+            `<p><a href="${escapeHtml(resetUrl)}">Alege o parolă nouă aici</a> (linkul este valabil 1 oră).</p>` +
             `<p>Dacă nu ai fost tu, poți ignora acest email.</p>` +
-            `<p style="color:#642A2E">Cu drag, echipa Librăria.</p>`,
+            `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`,
         })
       } catch (mailErr) {
-        // Non-fatal from the requester's perspective.
         console.warn('[libraria] reset email skipped:', mailErr.message)
       }
     }
-    res.json({ ok: true })
+    return res.json({ ok: true })
   } catch (err) {
     console.error('[libraria] request-password-reset error:', err.message)
-    res.json({ ok: true }) // still don't reveal account existence
+    return res.json({ ok: true }) // still don't reveal account existence
   }
 })
 
 /**
  * POST /api/auth/reset-password
- *
- * Validates a reset token (unused, not expired), then updates the user's
- * password hash and marks the token as used. Used by the `ResetPassword` page
- * after the user follows the link from the email.
- *
- * Body: { token: string, password: string }
+ * Validate a reset token (unused, not expired), then set the new password and
+ * mark the token as used. Used by the ResetPassword page after the email link.
  */
 authRouter.post('/reset-password', async (req, res) => {
-  const { token, password } = req.body || {}
+  const token = cleanString(req.body?.token, 200)
+  const password = typeof req.body?.password === 'string' ? req.body.password : ''
   if (!token || !password) {
     return res.status(422).json({ error: 'Tokenul și noua parolă sunt obligatorii.' })
   }
-  if (typeof password !== 'string' || password.length < 6) {
-    return res.status(422).json({ error: 'Parola trebuie să aibă cel puțin 6 caractere.' })
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return res
+      .status(422)
+      .json({ error: `Parola trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.` })
   }
 
-  const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex')
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
   let client
   try {
     client = await pool.connect()
@@ -209,16 +277,13 @@ authRouter.post('/reset-password', async (req, res) => {
     }
     const resetRow = rows[0]
     const hash = await bcrypt.hash(password, 10)
-    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
-      hash,
-      resetRow.user_id,
-    ])
-    await client.query('UPDATE password_resets SET used = true WHERE id = $1', [resetRow.id])
+    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, resetRow.user_id])
+    await client.query('UPDATE password_resets SET used = true WHERE user_id = $1', [resetRow.user_id])
     await client.query('COMMIT')
     return res.json({ ok: true })
   } catch (err) {
     if (client) await client.query('ROLLBACK').catch(() => {})
-    return res.status(500).json({ error: err.message })
+    return serverError(res, err, 'reset-password')
   } finally {
     if (client) client.release()
   }

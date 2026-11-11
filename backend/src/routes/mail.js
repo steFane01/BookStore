@@ -1,54 +1,53 @@
 import { Router } from 'express'
 import { sendMail, describeMailConfig } from '../mailer.js'
+import { requireAdmin } from '../auth.js'
+import { cleanString, isEmail } from '../lib/text.js'
 
 export const mailRouter = Router()
 
 /**
- * GET /api/mail/status
- * Diagostic — which transport is active and whether the previous test send
- * succeeded. Never exposes SMTP credentials.
+ * Mail diagnostics — ADMIN ONLY.
+ *
+ * These endpoints used to be public, which turned the SMTP account into an open
+ * relay for anyone who found the URL. They are now restricted to the owner.
  */
 const state = { lastSend: null, lastError: null, lastTo: null }
-mailRouter.get('/status', (_req, res) => {
-  res.json({ config: describeMailConfig(), lastSend: state.lastSend, lastError: state.lastError, lastTo: state.lastTo })
+
+mailRouter.get('/status', requireAdmin, (_req, res) => {
+  res.json({
+    config: describeMailConfig(),
+    lastSend: state.lastSend,
+    lastError: state.lastError,
+    lastTo: state.lastTo,
+  })
 })
 
-/**
- * POST /api/mail/test
- * Send a test email to the given address. Use this to verify real delivery
- * (e.g. to your Gmail) or to see the message in the Mailpit web UI.
- *
- * Body: { to: string, subject?: string }
- */
-mailRouter.post('/test', async (req, res) => {
-  const { to, subject } = req.body || {}
-  if (!to || !String(to).includes('@')) {
+mailRouter.post('/test', requireAdmin, async (req, res) => {
+  const to = cleanString(req.body?.to, 200)
+  if (!isEmail(to)) {
     return res.status(422).json({ error: 'Adresa de email destinatar este obligatorie.' })
   }
-  const recipient = String(to).trim()
-  const subj = String(subject || 'Mesaj de test — Librăria')
+  const subject = cleanString(req.body?.subject, 200) || 'Mesaj de test'
   try {
     const info = await sendMail({
-      to: recipient,
-      subject: subj,
+      to,
+      subject,
       text:
-        'Acesta este un email de test trimis din aplicația Librăria.\n\n' +
-        'Dacă îl vezi, integrarea cu serviciul de email funcționează corect.\n\n' +
-        'Cu drag, echipa Librăria.',
+        'Acesta este un email de test trimis din magazinul online.\n\n' +
+        'Dacă îl vezi, integrarea cu serviciul de email funcționează corect.',
       html:
         '<div style="font-family:Arial,sans-serif;color:#1d1d1b">' +
-        '<h2>Librăria</h2>' +
-        '<p>Acesta este un <strong>email de test</strong> trimis din aplicația Librăria.</p>' +
+        '<p>Acesta este un <strong>email de test</strong> trimis din magazinul online.</p>' +
         '<p>Dacă îl vezi, integrarea cu serviciul de email funcționează corect.</p>' +
-        '<p style="color:#642A2E">Cu drag, echipa Librăria.</p>' +
         '</div>',
     })
     state.lastSend = new Date().toISOString()
-    state.lastTo = recipient
+    state.lastTo = to
     state.lastError = null
-    res.json({ ok: true, messageId: info.messageId, to: recipient })
+    return res.json({ ok: true, messageId: info.messageId, to })
   } catch (err) {
     state.lastError = err.message
-    res.status(502).json({ error: `Eroare la trimiterea emailului: ${err.message}` })
+    console.error('[libraria] test email failed:', err.message)
+    return res.status(502).json({ error: 'Emailul de test nu a putut fi trimis. Verifică setările SMTP.' })
   }
 })

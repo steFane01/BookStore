@@ -1,32 +1,54 @@
 import jwt from 'jsonwebtoken'
+import { getJwtSecret, getTokenTtl } from './config.js'
 
 /**
  * Shared auth helpers for the Librăria backend.
  *
- * Sessions use short-lived JSON Web Tokens carrying the user id and role.
- * The secret comes from the environment (never committed; see `.env.example`).
+ * Sessions use JSON Web Tokens carrying the user id and role. The signing secret
+ * is resolved lazily from the environment so a production boot without a real
+ * secret fails fast instead of accepting forgeable tokens.
  */
-const JWT_SECRET = process.env.JWT_SECRET || 'libraria-dev-secret-change-me'
-const TOKEN_TTL = process.env.JWT_TTL || '7d'
 
 /** Sign a token for a user row. */
 export function signToken(user) {
   return jwt.sign(
     { sub: user.id, role: user.role, email: user.email },
-    JWT_SECRET,
-    { expiresIn: TOKEN_TTL },
+    getJwtSecret(),
+    { expiresIn: getTokenTtl() },
   )
+}
+
+/** Extract the Bearer token from the request headers, if present. */
+function readBearerToken(req) {
+  const header = req.headers.authorization || ''
+  return header.startsWith('Bearer ') ? header.slice(7).trim() : null
+}
+
+/**
+ * Attach `req.user` when a valid token is present, but never fail the request.
+ * Used by guest-friendly endpoints (order creation) where a logged-in customer
+ * should be linked to their order while guests still check out.
+ */
+export function optionalAuth(req, _res, next) {
+  const token = readBearerToken(req)
+  if (!token) return next()
+  try {
+    const payload = jwt.verify(token, getJwtSecret())
+    req.user = { id: payload.sub, role: payload.role, email: payload.email }
+  } catch {
+    // Invalid/expired token -> treat the request as anonymous.
+  }
+  return next()
 }
 
 /** Express middleware: requires a valid Bearer token; attaches `req.user`. */
 export function requireAuth(req, res, next) {
-  const header = req.headers.authorization || ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null
+  const token = readBearerToken(req)
   if (!token) {
     return res.status(401).json({ error: 'Neautorizat.' })
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET)
+    const payload = jwt.verify(token, getJwtSecret())
     req.user = { id: payload.sub, role: payload.role, email: payload.email }
     return next()
   } catch {

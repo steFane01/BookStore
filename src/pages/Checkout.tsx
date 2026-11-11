@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { DeliveryMethod } from '../types'
+import type { DeliveryMethod, OrderDraft } from '../types'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { OrderSummary } from '../components/OrderSummary'
@@ -14,6 +14,7 @@ export default function Checkout() {
   const { items, subtotal, clearCart } = useCart()
   const { user } = useAuth()
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('courier')
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   if (items.length === 0) {
     return (
@@ -31,13 +32,14 @@ export default function Checkout() {
 
   const isDigitalOnly = items.every((i) => i.productType === 'digital')
 
-  const handleSuccess = (orderId: string) => {
+  const handleSuccess = (order: OrderDraft) => {
     clearCart()
-    navigate(`/comanda/${orderId}`, { replace: true })
+    navigate(`/comanda/${order.reference}`, { replace: true, state: { order } })
   }
 
   const handleError = (message: string) => {
-    alert(message)
+    setSubmitError(message)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
@@ -63,6 +65,15 @@ export default function Checkout() {
         <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_24rem] lg:items-start">
           {/* Form */}
           <div>
+            {submitError && (
+              <div
+                className="mb-6 rounded border border-oxblood/30 bg-oxblood/5 px-4 py-3 text-sm text-oxblood"
+                role="alert"
+              >
+                <p className="font-medium">Comanda nu a putut fi trimisă.</p>
+                <p className="mt-1 text-oxblood/80">{submitError}</p>
+              </div>
+            )}
             <CheckoutForm
               items={items}
               userId={user?.id}

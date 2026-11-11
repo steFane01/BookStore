@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { CartItem, CustomerAddress, DeliveryMethod, EasyBox } from '../types'
+import type { CartItem, CustomerAddress, DeliveryMethod, EasyBox, OrderDraft } from '../types'
 import { FormField } from './FormField'
 import { orderService } from '../services/orderService'
 import { addressService } from '../services/addressService'
@@ -30,7 +30,7 @@ interface CheckoutFormProps {
   /** Selected delivery method (controlled by the checkout page). */
   deliveryMethod: DeliveryMethod
   onDeliveryMethodChange: (method: DeliveryMethod) => void
-  onSuccess: (orderId: string) => void
+  onSuccess: (order: OrderDraft) => void
   onError: (message: string) => void
 }
 
@@ -191,7 +191,7 @@ export function CheckoutForm({
           shippingCost: isDigitalOnly ? 0 : shippingFee,
         },
       )
-      onSuccess(draft.id)
+      onSuccess(draft)
     } catch (err) {
       onError(err instanceof Error ? err.message : 'A apărut o eroare. Încearcă din nou.')
     } finally {

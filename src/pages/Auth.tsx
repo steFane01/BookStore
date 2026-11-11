@@ -37,8 +37,8 @@ export default function Auth() {
         await login(email, password)
         navigate('/', { replace: true })
       } else if (mode === 'register') {
-        if (password.length < 6) {
-          setError('Parola trebuie să aibă cel puțin 6 caractere.')
+        if (password.length < 8) {
+          setError('Parola trebuie să aibă cel puțin 8 caractere.')
           return
         }
         if (password !== confirm) {

@@ -15,10 +15,10 @@ You are the main orchestrator for the **Librăria** bookstore project (React + V
 
 ## Project Stack (context for all decisions)
 
-- **Frontend** (`src/`): React 18 SPA with `react-router-dom`. Pages include Home, BookDetail, Checkout, OrderSuccess, Auth, Account, Admin, About, Contact. Contexts: `AuthContext`, `CartContext`. Services (`src/services/`): `bookService`, `orderService`, `authService` — currently **mock/localStorage**, designed to be swapped for real HTTP calls to the backend. Shared domain types in `src/types/index.ts`.
-- **Backend** (`backend/src/`): Node/Express template. Working: `GET /api/health`, `GET /api/books`. Stubbed (501): `/api/auth`, `/api/orders`, `/api/addresses`, `/api/cart`, `/api/users`. PostgreSQL via `pg` pool in `db.js`.
-- **Database** (`sql/init/`): `01_schema.sql` (users, books, addresses, orders, order_lines, cart_items, enums) and `02_seed.sql`. DB shape mirrors the frontend `Book`/`User`/`OrderDraft` types.
-- **Docker**: `docker-compose.yml` runs `db` (Postgres 16), `backend`, `frontend` (nginx).
+- **Frontend** (`src/`): React 18 SPA (Vite + TS + Tailwind) talking to the real `/api` backend. Pages: Home (search/sort), BookDetail, Checkout, OrderSuccess, OrderTracking, Auth, ResetPassword, Account (profile/addresses/orders/security), Admin (dashboard/products/categories/orders/subscribers/settings), About, Contact, Legal. Contexts: `AuthContext`, `CartContext`, `SettingsContext`. Services in `src/services/` are API-only (no mocks); owner-editable copy comes from `/api/settings`.
+- **Backend** (`backend/src/`): Node/Express + PostgreSQL. Real auth (bcrypt + JWT), catalog/category CRUD, orders with server-side pricing + stock reservation + status workflow, addresses, uploads (magic-byte validated), settings, newsletter, SameDay EasyBox proxy, mail via nodemailer. Hardened: helmet/CSP, CORS allow-list, per-IP rate limits, generic 500s, admin bootstrap from env. Tests live in `backend/test/` (run with `npm test`).
+- **Database** (`sql/init/`): `01_schema.sql` … `05_migration_settings_newsletter.sql`; `backend/src/db.js#ensureSchema()` keeps existing volumes in sync (site_settings, newsletter_subscribers, orders.admin_note, order_lines.variant_name).
+- **Docker**: `docker-compose.yml` (dev: db + backend + mailpit + nginx frontend) and `docker-compose.prod.yml` (no public DB port, no Mailpit, required secrets, healthchecks).
 
 ## Collaboration Rules
 
@@ -29,7 +29,7 @@ You are the main orchestrator for the **Librăria** bookstore project (React + V
 - For auth, order/payment, checkout, admin, security, or architectural work, follow the specialized workflows below.
 - Preserve pre-existing dirty-worktree changes and never widen the requested scope without user authorization.
 - Never run `docker compose down -v` or destructive database operations unless the user explicitly requests the data deletion.
-- The frontend currently talks to **mock services** (`src/services/*`) and **localStorage**; the backend is a **template** with several 501 stubs. When wiring backend features, keep the frontend service contracts stable so UI components do not need to change.
+- The frontend talks to the real API only. Keep the service contracts (`src/services/*`) stable when changing endpoints: pages consume those contracts.
 
 ## Thinking & Delegation
 

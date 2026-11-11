@@ -1,18 +1,25 @@
 import { Router } from 'express'
 import crypto from 'node:crypto'
 import { pool } from '../db.js'
-import { requireAuth, requireAdmin } from '../auth.js'
+import { optionalAuth, requireAdmin, requireAuth } from '../auth.js'
 import { sendMail, getContactRecipient } from '../mailer.js'
+import { getPublicUrl, SHIPPING_FEES } from '../config.js'
 import { findLocker } from '../sameday.js'
-
-/** Standard SameDay shipping fees (RON). Courier home + easybox pickup point. */
-export const SHIPPING_FEES = { courier: 19, easybox: 12 }
+import { getSiteName } from '../settings.js'
+import { ApiError, serverError } from '../lib/errors.js'
+import { cleanString, escapeHtml, isEmail } from '../lib/text.js'
+import { computeOrderTotals, resolveOrderLines } from '../lib/pricing.js'
 
 export const ordersRouter = Router()
 
-/** Loose email validator. */
-function isEmail(value) {
-  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+export const ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled']
+
+export const ORDER_STATUS_LABELS = {
+  pending: 'În așteptare',
+  processing: 'În procesare',
+  shipped: 'Expediată',
+  delivered: 'Livrată',
+  cancelled: 'Anulată',
 }
 
 /**
@@ -20,16 +27,17 @@ function isEmail(value) {
  * JSON shape. Shipping columns are flattened in the DB (`ship_*`); we rebuild
  * the nested `shipping` object here so the UI can render it unchanged.
  */
-function toOrder(row, lines) {
+function toOrder(row, lines, { admin = false } = {}) {
   return {
     id: row.id,
     reference: row.reference,
-    lines: lines.map((l) => ({
-      bookId: l.book_id,
-      title: l.title,
-      author: l.author,
-      price: Number(l.price),
-      quantity: l.quantity,
+    lines: lines.map((line) => ({
+      bookId: line.book_id,
+      title: line.title,
+      author: line.author,
+      price: Number(line.price),
+      quantity: line.quantity,
+      variantName: line.variant_name ?? undefined,
     })),
     shipping: {
       fullName: row.ship_full_name,
@@ -51,439 +59,533 @@ function toOrder(row, lines) {
     total: row.total != null ? Number(row.total) : Number(row.subtotal),
     deliveryMethod: row.delivery_method || 'courier',
     easybox: row.easybox_name
-      ? {
-          name: row.easybox_name,
-          address: row.easybox_address ?? '',
-        }
+      ? { name: row.easybox_name, address: row.easybox_address ?? '' }
       : undefined,
-    payment: row.payment,
+    payment: row.payment ?? null,
     status: row.status,
+    ...(admin ? { adminNote: row.admin_note ?? undefined } : {}),
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? undefined,
     userId: row.user_id,
   }
 }
 
 /** Load a full order (with lines) by id, or null when missing. */
-async function fetchOrderWithLines(id) {
+async function fetchOrderWithLines(id, options = {}) {
   const { rows } = await pool.query('SELECT * FROM orders WHERE id = $1', [id])
   if (rows.length === 0) return null
   const lines = await pool.query(
-    'SELECT book_id, title, author, price, quantity FROM order_lines WHERE order_id = $1 ORDER BY id',
+    'SELECT book_id, title, author, price, quantity, variant_name FROM order_lines WHERE order_id = $1 ORDER BY id',
     [id],
   )
-  return toOrder(rows[0], lines.rows)
+  return toOrder(rows[0], lines.rows, options)
 }
 
-/**
- * Build the plain-text + HTML body of the "new order" email sent to the owner.
- * Carries the exact delivery details: for courier (acasă) the full address, or
- * for SameDay EasyBox the chosen pickup point (name + address). Includes the
- * shipping cost and the grand total so the owner sees everything at a glance.
- */
-function buildOwnerEmail({ reference, createdAt, lines, shipping, subtotal, deliveryMethod, easybox, shippingCost, total }) {
-  const linesText = lines
-    .map((l) => `- ${l.title} (${l.author}) x${l.quantity} — ${l.price} RON`)
-    .join('\n')
+/** Make a stored file path clickable from an email. */
+function absoluteUrl(url) {
+  if (!url) return null
+  if (/^https?:\/\//i.test(url)) return url
+  return `${getPublicUrl()}${url.startsWith('/') ? '' : '/'}${url}`
+}
 
-  const isEasybox = deliveryMethod === 'easybox'
-  const addressLine = [
-    `${shipping.street} nr. ${shipping.number}`,
-    shipping.block ? `Bl. ${shipping.block}` : '',
-    shipping.apartment ? `Ap. ${shipping.apartment}` : '',
-    shipping.floor ? `Et. ${shipping.floor}` : '',
+/** Human-readable address block for courier delivery. */
+function addressLines(shipping) {
+  const first = [`${shipping.street} nr. ${shipping.number}`]
+  if (shipping.block) first.push(`Bl. ${shipping.block}`)
+  if (shipping.staircase) first.push(`Sc. ${shipping.staircase}`)
+  if (shipping.floor) first.push(`Et. ${shipping.floor}`)
+  if (shipping.apartment) first.push(`Ap. ${shipping.apartment}`)
+  return [
+    first.filter(Boolean).join(', '),
+    `${shipping.locality}, ${shipping.county}${shipping.postalCode ? `, ${shipping.postalCode}` : ''}`,
   ]
-    .filter(Boolean)
-    .join(', ')
+}
 
+/** Render one order line for the plain-text email body. */
+function lineText(line) {
+  const variant = line.variantName ? ` [${line.variantName}]` : ''
+  return `- ${line.title}${variant} (${line.author}) x${line.quantity} — ${Number(line.price).toFixed(2)} RON`
+}
+
+/** HTML table with the ordered products. */
+function linesTable(lines) {
+  return (
+    `<table cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse">` +
+    `<tr style="background:#f4f1ea"><th align="left">Produs</th><th align="right">Cant.</th>` +
+    `<th align="right">Preț</th></tr>` +
+    lines
+      .map(
+        (line) =>
+          `<tr><td>${escapeHtml(line.title)}${line.variantName ? ` <em>(${escapeHtml(line.variantName)})</em>` : ''}` +
+          ` (${escapeHtml(line.author)})</td><td align="right">${line.quantity}</td>` +
+          `<td align="right">${(Number(line.price) * line.quantity).toFixed(2)} RON</td></tr>`,
+      )
+      .join('') +
+    `</table>`
+  )
+}
+
+/** Totals rows shared by both emails. */
+function totalsRowsHtml(subtotal, shippingCost, total) {
+  return (
+    `<p style="margin:0">Subtotal: <strong>${subtotal.toFixed(2)} RON</strong><br/>` +
+    `Transport: ${Number(shippingCost || 0).toFixed(2)} RON<br/>` +
+    `TOTAL: <strong>${Number(total || subtotal).toFixed(2)} RON</strong></p>`
+  )
+}
+
+/** Email to the owner: everything needed to place the shipment manually. */
+function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtotal, deliveryMethod, easybox, shippingCost, total, adminUrl }) {
+  const isEasybox = deliveryMethod === 'easybox'
+  const address = addressLines(shipping)
+  const notes = shipping.notes ? `Observații: ${shipping.notes}\n` : ''
   const deliveryText = isEasybox
-    ? `== Livrare: EasyBox SameDay ==\n` +
-      `Punct: ${easybox?.name ?? '—'}\n` +
-      `Adresă EasyBox: ${easybox?.address ?? '—'}\n` +
-      `Destinatar: ${shipping.fullName}\n` +
-      `Telefon: ${shipping.phone}\n` +
-      (shipping.notes ? `Observații: ${shipping.notes}\n` : '') +
-      `\nSelectează acest EasyBox în aplicația SameDay pentru a-l trimite clientului.`
-    : `== Livrare: Curier (acasă) ==\n` +
-      `Nume: ${shipping.fullName}\n` +
-      `Email: ${shipping.email}\n` +
-      `Telefon: ${shipping.phone}\n` +
-      `Adresă: ${addressLine}\n` +
-      `${shipping.locality}, ${shipping.county}${shipping.postalCode ? `, ${shipping.postalCode}` : ''}\n` +
-      (shipping.notes ? `Observații: ${shipping.notes}\n` : '') +
-      `\nContactează clientul pentru a stabili livrarea.`
+    ? `== Livrare: EasyBox ==\nPunct: ${easybox?.name ?? '—'}\nAdresă EasyBox: ${easybox?.address ?? '—'}\nDestinatar: ${shipping.fullName}\nTelefon: ${shipping.phone}\n${notes}`
+    : `== Livrare: curier la adresă ==\nNume: ${shipping.fullName}\nEmail: ${shipping.email}\nTelefon: ${shipping.phone}\nAdresă: ${address.join(', ')}\n${notes}`
 
   const text =
-    `Ai primit o comandă nouă care trebuie transmisă către firma de curierat SameDay.\n\n` +
+    `Ai primit o comandă nouă pe ${brand}.\n\n` +
     `Număr comandă: ${reference}\n` +
     `Data: ${new Date(createdAt).toLocaleString('ro-RO')}\n\n` +
-    `== Cărți ==\n${linesText}\n` +
+    `== Produse ==\n${lines.map(lineText).join('\n')}\n` +
     `Subtotal: ${subtotal.toFixed(2)} RON\n` +
     `Transport: ${Number(shippingCost || 0).toFixed(2)} RON\n` +
     `TOTAL: ${Number(total || subtotal).toFixed(2)} RON\n\n` +
-    `${deliveryText}\n\n` +
-    `Echipa Librăria.`
+    `${deliveryText}\n` +
+    `Gestionează comanda: ${adminUrl}\n\n` +
+    `Echipa ${brand}.`
 
   const html =
-    `<p><strong>Ai primit o comandă nouă</strong> care trebuie transmisă către firma de curierat SameDay.</p>` +
-    `<p style="color:#642A2E;font-size:1.15em"><strong>${reference}</strong></p>` +
-    `<table cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse">` +
-    `<tr style="background:#f4f1ea"><th align="left">Carte</th><th align="right">Cant.</th><th align="right">Preț</th></tr>` +
-    lines
-      .map(
-        (l) =>
-          `<tr><td>${String(l.title).replace(/</g, '&lt;')} (${String(l.author).replace(/</g, '&lt;')})</td>` +
-          `<td align="right">${l.quantity}</td><td align="right">${Number(l.price).toFixed(2)} RON</td></tr>`,
-      )
-      .join('') +
-    `<tr><td colspan="2"><strong>Subtotal</strong></td>` +
-    `<td align="right"><strong>${subtotal.toFixed(2)} RON</strong></td></tr>` +
-    `<tr><td colspan="2">Transport</td>` +
-    `<td align="right">${Number(shippingCost || 0).toFixed(2)} RON</td></tr>` +
-    `<tr><td colspan="2"><strong>TOTAL</strong></td>` +
-    `<td align="right"><strong>${Number(total || subtotal).toFixed(2)} RON</strong></td></tr>` +
-    `</table>` +
+    `<p><strong>Ai primit o comandă nouă</strong> pe ${escapeHtml(brand)}.</p>` +
+    `<p style="color:#642A2E;font-size:1.15em"><strong>${escapeHtml(reference)}</strong></p>` +
+    `<p>Data: ${escapeHtml(new Date(createdAt).toLocaleString('ro-RO'))}</p>` +
+    linesTable(lines) +
+    totalsRowsHtml(subtotal, shippingCost, total) +
     (isEasybox
-      ? `<h3>Livrare — EasyBox SameDay</h3>` +
-        `<p>Punct: <strong>${easybox?.name ?? '—'}</strong><br/>` +
-        `Adresă EasyBox: ${easybox?.address ?? '—'}<br/>` +
-        `Destinatar: ${shipping.fullName}<br/>` +
-        `Telefon: ${shipping.phone}</p>` +
-        (shipping.notes ? `<p>Observații: ${shipping.notes}</p>` : '') +
-        `<p style="color:#642A2E">Selectează acest EasyBox în aplicația SameDay pentru a-l trimite clientului.</p>`
-      : `<h3>Livrare — Curier (acasă)</h3>` +
-        `<p>Nume: <strong>${shipping.fullName}</strong><br/>` +
-        `Email: ${shipping.email}<br/>` +
-        `Telefon: ${shipping.phone}</p>` +
-        `<p>Adresă: ${addressLine}<br/>${shipping.locality}, ${shipping.county}${shipping.postalCode ? `, ${shipping.postalCode}` : ''}</p>` +
-        (shipping.notes ? `<p>Observații: ${shipping.notes}</p>` : '') +
-        `<p>Contactează clientul pentru a stabili livrarea.</p>`) +
-    `<p style="color:#642A2E">Cu drag, echipa Librăria.</p>`
+      ? `<h3>Livrare — EasyBox</h3><p>Punct: <strong>${escapeHtml(easybox?.name ?? '—')}</strong><br/>` +
+        `Adresă EasyBox: ${escapeHtml(easybox?.address ?? '—')}<br/>` +
+        `Destinatar: ${escapeHtml(shipping.fullName)}<br/>Telefon: ${escapeHtml(shipping.phone)}</p>`
+      : `<h3>Livrare — curier la adresă</h3><p>Nume: <strong>${escapeHtml(shipping.fullName)}</strong><br/>` +
+        `Email: ${escapeHtml(shipping.email)}<br/>Telefon: ${escapeHtml(shipping.phone)}<br/>` +
+        `Adresă: ${escapeHtml(address.join(', '))}</p>`) +
+    (shipping.notes ? `<p>Observații: ${escapeHtml(shipping.notes)}</p>` : '') +
+    `<p><a href="${escapeHtml(adminUrl)}">Deschide panoul de administrare</a></p>` +
+    `<p style="color:#642A2E">Echipa ${escapeHtml(brand)}.</p>`
 
   return { text, html }
 }
 
-/**
- * Build the confirmation email sent to the CUSTOMER after an order is placed.
- * Carries the same delivery details as the owner's email — the chosen SameDay
- * EasyBox (name + address) for easybox deliveries — plus a compact summary of
- * the items, the shipping cost and the grand total, so the customer has the
- * EasyBox details and the basic order info at a glance right in their inbox.
- */
-function buildCustomerEmail({ reference, lines, shipping, subtotal, deliveryMethod, easybox, shippingCost, total, createdAt }) {
-  const linesText = lines
-    .map((l) => `- ${l.title} (${l.author}) x${l.quantity} — ${Number(l.price).toFixed(2)} RON`)
-    .join('\n')
-
+/** Confirmation email to the customer (with download links for digital items). */
+function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliveryMethod, easybox, shippingCost, total, digitalLinks }) {
   const isEasybox = deliveryMethod === 'easybox'
-  const deliveryText = isEasybox
-    ? `Livrare: EasyBox SameDay\nPunct: ${easybox?.name ?? '—'}\nAdresă EasyBox: ${easybox?.address ?? '—'}\nDestinatar: ${shipping.fullName}\nTelefon: ${shipping.phone}`
-    : `Livrare: Curier (acasă)\nAdresă: ${shipping.street} nr. ${shipping.number}, ${shipping.locality}, ${shipping.county}${shipping.postalCode ? `, ${shipping.postalCode}` : ''}\nDestinatar: ${shipping.fullName}\nTelefon: ${shipping.phone}`
+  const address = addressLines(shipping)
+  const digitalText = digitalLinks.length
+    ? `\n== Produse digitale ==\n` +
+      digitalLinks
+        .map((link) => `- ${link.title}: ${link.url}${link.access ? ` (${link.access})` : ''}`)
+        .join('\n') +
+      '\n'
+    : ''
 
   const text =
-    `Bună, ${shipping.fullName}!\n\n` +
-    `Comanda ta a fost înregistrată cu succes.\n\n` +
-    `Număr comandă: ${reference}\n` +
-    `Data: ${new Date(createdAt).toLocaleString('ro-RO')}\n\n` +
-    `== Cărți comandate ==\n${linesText}\n` +
-    `Subtotal: ${Number(subtotal).toFixed(2)} RON\n` +
+    `Salut, ${shipping.fullName}!\n\n` +
+    `Comanda ta la ${brand} a fost înregistrată cu numărul ${reference}.\n` +
+    `Nu se plătește nimic online — te contactăm pentru confirmare și livrare.\n\n` +
+    `== Produse ==\n${lines.map(lineText).join('\n')}\n` +
+    `Subtotal: ${subtotal.toFixed(2)} RON\n` +
     `Transport: ${Number(shippingCost || 0).toFixed(2)} RON\n` +
     `TOTAL: ${Number(total || subtotal).toFixed(2)} RON\n\n` +
-    `${deliveryText}\n\n` +
-    `Veți fi contactat(ă) pentru finalizarea plății și livrare.\n\n` +
-    `Cu drag, echipa Librăria.`
+    (isEasybox
+      ? `Livrare la EasyBox: ${easybox?.name ?? '—'} (${easybox?.address ?? '—'})\nDestinatar: ${shipping.fullName}, ${shipping.phone}\n`
+      : `Livrare la adresă: ${address.join(', ')}\n`) +
+    digitalText +
+    `\nCu drag, echipa ${brand}.`
 
   const html =
-    `<p>Bună, <strong>${shipping.fullName}</strong>!</p>` +
-    `<p>Comanda ta a fost înregistrată cu succes. Îți mulțumim!</p>` +
-    `<p style="color:#642A2E;font-size:1.15em"><strong>${reference}</strong></p>` +
-    `<table cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse">` +
-    `<tr style="background:#f4f1ea"><th align="left">Carte</th><th align="right">Cant.</th><th align="right">Preț</th></tr>` +
-    lines
-      .map(
-        (l) =>
-          `<tr><td>${String(l.title).replace(/</g, '&lt;')} (${String(l.author).replace(/</g, '&lt;')})</td>` +
-          `<td align="right">${l.quantity}</td><td align="right">${Number(l.price).toFixed(2)} RON</td></tr>`,
-      )
-      .join('') +
-    `<tr><td colspan="2"><strong>Subtotal</strong></td>` +
-    `<td align="right"><strong>${Number(subtotal).toFixed(2)} RON</strong></td></tr>` +
-    `<tr><td colspan="2">Transport</td>` +
-    `<td align="right">${Number(shippingCost || 0).toFixed(2)} RON</td></tr>` +
-    `<tr><td colspan="2"><strong>TOTAL</strong></td>` +
-    `<td align="right"><strong>${Number(total || subtotal).toFixed(2)} RON</strong></td></tr>` +
-    `</table>` +
+    `<p>Salut, <strong>${escapeHtml(shipping.fullName)}</strong>!</p>` +
+    `<p>Comanda ta la <strong>${escapeHtml(brand)}</strong> a fost înregistrată cu numărul ` +
+    `<strong>${escapeHtml(reference)}</strong>.</p>` +
+    `<p>Nu se plătește nimic online — te contactăm pentru confirmare și livrare.</p>` +
+    linesTable(lines) +
+    totalsRowsHtml(subtotal, shippingCost, total) +
     (isEasybox
-      ? `<h3 style="margin-bottom:4px">Livrare — EasyBox SameDay</h3>` +
-        `<p>Punct: <strong>${easybox?.name ?? '—'}</strong><br/>` +
-        `Adresă EasyBox: ${easybox?.address ?? '—'}<br/>` +
-        `Destinatar: ${shipping.fullName}<br/>` +
-        `Telefon: ${shipping.phone}</p>`
-      : `<h3 style="margin-bottom:4px">Livrare — Curier (acasă)</h3>` +
-        `<p>Adresă: ${shipping.street} nr. ${shipping.number}, ${shipping.locality}, ${shipping.county}${shipping.postalCode ? `, ${shipping.postalCode}` : ''}<br/>` +
-        `Destinatar: ${shipping.fullName}<br/>` +
-        `Telefon: ${shipping.phone}</p>`) +
-    `<p style="color:#642A2E">Veți fi contactat(ă) pentru finalizarea plății și livrare.</p>` +
-    `<p style="color:#642A2E">Cu drag, echipa Librăria.</p>`
+      ? `<h3>Livrare — EasyBox</h3><p>${escapeHtml(easybox?.name ?? '—')}<br/>${escapeHtml(easybox?.address ?? '—')}<br/>` +
+        `Destinatar: ${escapeHtml(shipping.fullName)}, ${escapeHtml(shipping.phone)}</p>`
+      : `<h3>Livrare</h3><p>${escapeHtml(address.join(', '))}</p>`) +
+    (digitalLinks.length
+      ? `<h3>Produse digitale</h3><ul>` +
+        digitalLinks
+          .map(
+            (link) =>
+              `<li><a href="${escapeHtml(link.url)}">${escapeHtml(link.title)}</a>` +
+              (link.access ? `<br/><small>${escapeHtml(link.access)}</small>` : '') +
+              `</li>`,
+          )
+          .join('') +
+        `</ul>`
+      : '') +
+    `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`
 
   return { text, html }
 }
 
-
+/** Email sent to the customer when the owner changes the order status. */
+function buildStatusEmail({ brand, reference, status, shipping }) {
+  const label = ORDER_STATUS_LABELS[status] || status
+  const detail = {
+    processing: 'Comanda ta este pregătită și urmează să fie expediată.',
+    shipped: 'Comanda ta a fost expediată. Curierul te va contacta pentru livrare.',
+    delivered: 'Comanda ta a fost livrată. Îți mulțumim că ai cumpărat de la noi!',
+    cancelled: 'Comanda ta a fost anulată. Dacă ai întrebări, scrie-ne.',
+    pending: 'Comanda ta este în așteptare.',
+  }[status] || ''
+  const text =
+    `Salut, ${shipping.fullName}!\n\n` +
+    `Comanda ${reference} are acum statusul: ${label}.\n` +
+    (detail ? `${detail}\n` : '') +
+    `\nCu drag, echipa ${brand}.`
+  const html =
+    `<p>Salut, <strong>${escapeHtml(shipping.fullName)}</strong>!</p>` +
+    `<p>Comanda <strong>${escapeHtml(reference)}</strong> are acum statusul:` +
+    ` <strong>${escapeHtml(label)}</strong>.</p>` +
+    (detail ? `<p>${escapeHtml(detail)}</p>` : '') +
+    `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`
+  return { text, html }
+}
 
 /**
  * POST /api/orders
  *
- * Records a new order inside a single transaction so the reference and the order
- * lines land atomically (all-or-nothing). No online payment (by design). After
- * committing, it emails the EXACT delivery details to the owner's mailbox (the
- * same inbox that receives contact messages), because the owner arranges the
- * courier directly.
- *
- * Body: { lines: OrderLine[], shipping: ShippingAddress, userId?: string }
+ * Create an order. The cart comes from the browser, but prices, stock and
+ * product identity are resolved from the database, stock is decremented inside
+ * the same transaction, and the owner + customer receive the delivery details.
+ * Guests may check out; a valid session links the order to the account.
  */
-ordersRouter.post('/', async (req, res) => {
-  const { lines, shipping } = req.body || {}
-  const userId = req.body?.userId || null
+ordersRouter.post('/', optionalAuth, async (req, res) => {
+  const rawLines = Array.isArray(req.body?.lines) ? req.body.lines : []
+  const shipping = req.body?.shipping && typeof req.body.shipping === 'object' ? req.body.shipping : null
+  const deliveryMethod = req.body?.deliveryMethod === 'easybox' ? 'easybox' : 'courier'
+  const easyboxId = cleanString(req.body?.easyboxId, 120)
 
-  // Delivery method: 'courier' (acasă, SameDay) or 'easybox' (SameDay pickup point).
-  let deliveryMethod = req.body?.deliveryMethod === 'easybox' ? 'easybox' : 'courier'
-  const easyboxId = String(req.body?.easyboxId || '').trim()
-  // Resolve the box either from the live SameDay lockers or the bundled list.
-  const easybox = deliveryMethod === 'easybox' ? await findLocker(easyboxId) : null
-  const shippingCost = Number(req.body?.shippingCost ?? 0)
-
-  if (!Array.isArray(lines) || lines.length === 0) {
-    return res.status(422).json({ error: 'Coșul nu poate fi gol.' })
-  }
-  if (!shipping || typeof shipping !== 'object') {
+  if (!shipping) {
     return res.status(422).json({ error: 'Datele de livrare sunt obligatorii.' })
   }
-
-  const fullName = String(shipping.fullName || '').trim()
-  const email = String(shipping.email || '').trim()
-  const phone = String(shipping.phone || '').trim()
-  const county = String(shipping.county || '').trim()
-  const locality = String(shipping.locality || '').trim()
-  const street = String(shipping.street || '').trim()
-  const number = String(shipping.number || '').trim()
-
-  // Courier needs the full address; EasyBox needs a valid pickup point.
+  const fullName = cleanString(shipping.fullName, 160)
+  const email = cleanString(shipping.email, 200).toLowerCase()
+  const phone = cleanString(shipping.phone, 40)
   if (!fullName || !isEmail(email) || !phone) {
     return res.status(422).json({ error: 'Completează numele, emailul și telefonul.' })
   }
+
+  let easybox = null
   if (deliveryMethod === 'easybox') {
+    easybox = await findLocker(easyboxId).catch(() => null)
     if (!easybox) {
-      return res.status(422).json({ error: 'Alege un EasyBox SameDay pentru livrare.' })
+      return res.status(422).json({ error: 'Alege un EasyBox valid pentru livrare.' })
     }
-  } else if (!county || !locality || !street || !number) {
-    return res.status(422).json({ error: 'Completează toate câmpurile obligatorii de adresă.' })
   }
 
-  let subtotal = 0
-  for (const l of lines) {
-    const price = Number(l.price)
-    const qty = Number(l.quantity)
-    if (!Number.isFinite(price) || price < 0 || !Number.isInteger(qty) || qty <= 0) {
-      return res.status(422).json({ error: 'Linia de comandă este invalidă.' })
-    }
-    subtotal += price * qty
-  }
-
-  const shipObj = {
-    fullName,
-    email,
-    phone: phone || null,
-    county: deliveryMethod === 'easybox' ? (county || '—') : county,
-    locality: deliveryMethod === 'easybox' ? (locality || '—') : locality,
-    street: deliveryMethod === 'easybox' ? (street || '') : street,
-    number: deliveryMethod === 'easybox' ? (number || '') : number,
-    block: String(shipping.block ?? '').trim() || null,
-    staircase: String(shipping.staircase ?? '').trim() || null,
-    floor: String(shipping.floor ?? '').trim() || null,
-    apartment: String(shipping.apartment ?? '').trim() || null,
-    postalCode: String(shipping.postalCode ?? '').trim() || null,
-    notes: String(shipping.notes ?? '').trim() || null,
-  }
-
-  // Real subtotal is computed server-side; the shipping fee is bounded to the
-  // known rate for the chosen method so a client can't invent a discount.
-  const fee = deliveryMethod === 'easybox' ? SHIPPING_FEES.easybox : SHIPPING_FEES.courier
-  const finalShipping = Number.isFinite(shippingCost) && shippingCost >= 0 ? Math.min(shippingCost, fee) : fee
-  const total = Math.round((subtotal + finalShipping) * 100) / 100
-
-  let client
   try {
-    client = await pool.connect()
-    await client.query('BEGIN')
-
-    // Only link user_id when it matches a real account, so a non-UUID/demo id
-    // can never break the foreign-key constraint.
-    let ownerId = userId || null
-    if (ownerId) {
-      const existing = await client.query('SELECT id FROM users WHERE id = $1', [ownerId])
-      if (existing.rowCount === 0) ownerId = null
+    // ---- Authoritative catalog lookup (never trust prices from the browser). ----
+    const ids = [...new Set(rawLines.map((line) => String(line?.bookId ?? '').trim()).filter(Boolean))]
+    const booksById = new Map()
+    if (ids.length > 0) {
+      const { rows } = await pool.query(
+        `SELECT id, title, author, price, stock, product_type, variants, digital_file_url, digital_access
+         FROM books WHERE id = ANY($1::text[])`,
+        [ids],
+      )
+      for (const row of rows) booksById.set(row.id, row)
     }
 
-    // Atomic reference derived from a freshly generated UUID, so `id` and
-    // `reference` are inherently unique — no retry loop or race to worry about.
-    const orderId = crypto.randomUUID()
-    const reference = `LB-${new Date().getFullYear()}-${orderId.slice(0, 6).toUpperCase()}`
+    const { lines, errors } = resolveOrderLines(rawLines, booksById)
+    if (errors.length > 0) {
+      return res.status(422).json({ error: errors[0] })
+    }
 
-    const ins = await client.query(
-      `INSERT INTO orders (id, reference, user_id, status, subtotal,
-         delivery_method, easybox_name, easybox_address, shipping_cost, total,
-         ship_full_name, ship_email, ship_phone, ship_county, ship_locality,
-         ship_street, ship_number, ship_block, ship_staircase, ship_floor,
-         ship_apartment, ship_postal_code, ship_notes)
-       VALUES ($1,$2,$3,'pending',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-       RETURNING id, created_at`,
-      [
-        orderId,
-        reference,
-        ownerId,
-        subtotal,
-        deliveryMethod,
-        easybox ? easybox.name : null,
-        easybox ? easybox.address : null,
-        finalShipping,
-        total,
-        shipObj.fullName,
-        shipObj.email,
-        shipObj.phone,
-        shipObj.county,
-        shipObj.locality,
-        shipObj.street,
-        shipObj.number,
-        shipObj.block,
-        shipObj.staircase,
-        shipObj.floor,
-        shipObj.apartment,
-        shipObj.postalCode,
-        shipObj.notes,
-      ],
+    const hasPhysical = lines.some((line) => line.productType === 'physical')
+    const county = cleanString(shipping.county, 120)
+    const locality = cleanString(shipping.locality, 120)
+    const street = cleanString(shipping.street, 200)
+    const number = cleanString(shipping.number, 40)
+    if (hasPhysical && (!county || !locality || !street || !number)) {
+      return res.status(422).json({ error: 'Completează toate câmpurile obligatorii de adresă.' })
+    }
+
+    const fee = deliveryMethod === 'easybox' ? SHIPPING_FEES.easybox : SHIPPING_FEES.courier
+    const { subtotal, shipping: shippingCost, total } = computeOrderTotals(
+      lines,
+      hasPhysical ? fee : 0,
     )
 
-    for (const l of lines) {
-      await client.query(
-        `INSERT INTO order_lines (order_id, book_id, title, author, price, quantity)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [orderId, l.bookId || null, String(l.title), String(l.author), Number(l.price), Number(l.quantity)],
-      )
+    const shipObj = {
+      fullName,
+      email,
+      phone,
+      county: county || null,
+      locality: locality || null,
+      street: street || null,
+      number: number || null,
+      block: cleanString(shipping.block, 40) || null,
+      staircase: cleanString(shipping.staircase, 40) || null,
+      floor: cleanString(shipping.floor, 40) || null,
+      apartment: cleanString(shipping.apartment, 40) || null,
+      postalCode: cleanString(shipping.postalCode, 20) || null,
+      notes: cleanString(shipping.notes, 1000) || null,
     }
 
-    await client.query('COMMIT')
+    let client
+    let orderId
+    let reference
+    try {
+      client = await pool.connect()
+      await client.query('BEGIN')
 
-    // Re-read the committed order from the DB so the response always mirrors
-    // exactly what is persisted (nested `shipping`, `userId`, `lines`, ...) —
-    // identical to what GET /api/orders/:id returns later.
+      // Link the order to a real account only (guests stay anonymous).
+      let ownerId = req.user?.id || null
+      if (ownerId) {
+        const existing = await client.query('SELECT id FROM users WHERE id = $1', [ownerId])
+        if (existing.rowCount === 0) ownerId = null
+      }
+
+      // Reserve stock atomically. Variants with their own stock decrement that
+      // variant; otherwise the product's base stock is used.
+      for (const line of lines) {
+        if (line.productType !== 'physical') continue
+        const book = booksById.get(line.bookId)
+        const variants = Array.isArray(book?.variants) ? book.variants : []
+        const variant = line.variantId
+          ? variants.find((item) => String(item.id) === String(line.variantId))
+          : null
+        const ownVariantStock = Boolean(variant && variant.stock != null)
+
+        const result = ownVariantStock
+          ? await client.query(
+              `UPDATE books SET variants = (
+                 SELECT jsonb_agg(
+                   CASE WHEN elem->>'id' = $2
+                     THEN jsonb_set(elem, '{stock}', to_jsonb(GREATEST(COALESCE((elem->>'stock')::int, 0) - $1::int, 0)))
+                     ELSE elem END
+                 ) FROM jsonb_array_elements(variants) AS elem
+               )
+               WHERE id = $3
+                 AND EXISTS (
+                   SELECT 1 FROM jsonb_array_elements(variants) AS e
+                   WHERE e->>'id' = $2 AND COALESCE((e->>'stock')::int, 0) >= $1::int
+                 )`,
+              [line.quantity, line.variantId, line.bookId],
+            )
+          : await client.query(
+              'UPDATE books SET stock = stock - $1 WHERE id = $2 AND stock >= $1',
+              [line.quantity, line.bookId],
+            )
+        if (result.rowCount === 0) {
+          throw new ApiError(
+            409,
+            `Stocul pentru „${line.title}” s-a epuizat între timp. Reîncarcă pagina și încearcă din nou.`,
+          )
+        }
+      }
+
+      // Atomic reference derived from a fresh UUID — id and reference are unique
+      // by construction, no retry loop needed.
+      orderId = crypto.randomUUID()
+      reference = `LB-${new Date().getFullYear()}-${orderId.slice(0, 6).toUpperCase()}`
+
+      await client.query(
+        `INSERT INTO orders (id, reference, user_id, status, subtotal,
+           delivery_method, easybox_name, easybox_address, shipping_cost, total,
+           ship_full_name, ship_email, ship_phone, ship_county, ship_locality,
+           ship_street, ship_number, ship_block, ship_staircase, ship_floor,
+           ship_apartment, ship_postal_code, ship_notes)
+         VALUES ($1,$2,$3,'pending',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+        [
+          orderId, reference, ownerId, subtotal, deliveryMethod,
+          easybox ? easybox.name : null, easybox ? easybox.address : null,
+          shippingCost, total, shipObj.fullName, shipObj.email, shipObj.phone,
+          shipObj.county, shipObj.locality, shipObj.street, shipObj.number,
+          shipObj.block, shipObj.staircase, shipObj.floor, shipObj.apartment,
+          shipObj.postalCode, shipObj.notes,
+        ],
+      )
+
+      for (const line of lines) {
+        await client.query(
+          `INSERT INTO order_lines (order_id, book_id, title, author, price, quantity, variant_name)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [
+            orderId, line.bookId, line.title, line.author, line.price, line.quantity,
+            line.variantName ?? null,
+          ],
+        )
+      }
+
+      await client.query('COMMIT')
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {})
+      throw err
+    } finally {
+      if (client) client.release()
+    }
+
+    // Re-read the committed order so the response mirrors the persistence layer.
     const draft = await fetchOrderWithLines(orderId)
+    const brand = await getSiteName()
 
-    // ---- Notify the owner with the exact delivery details (for the courier). ----
+    // Digital products: deliver the file/access link in the confirmation email.
+    const digitalLinks = lines
+      .filter((line) => line.productType === 'digital')
+      .map((line) => {
+        const book = booksById.get(line.bookId)
+        const url = absoluteUrl(book?.digital_file_url)
+        return url
+          ? { title: line.title, url, access: book?.digital_access || '' }
+          : null
+      })
+      .filter(Boolean)
+
     const owner = getContactRecipient()
     if (owner) {
       const { text, html } = buildOwnerEmail({
-        reference,
-        createdAt: draft.createdAt,
-        lines: draft.lines,
-        shipping: draft.shipping,
-        subtotal,
-        deliveryMethod: draft.deliveryMethod,
-        easybox: draft.easybox,
-        shippingCost: draft.shippingCost,
-        total: draft.total,
+        brand, reference, createdAt: draft.createdAt, lines: draft.lines,
+        shipping: draft.shipping, subtotal, deliveryMethod: draft.deliveryMethod,
+        easybox: draft.easybox, shippingCost: draft.shippingCost, total: draft.total,
+        adminUrl: `${getPublicUrl()}/admin`,
       })
-      try {
-        await sendMail({
-          to: owner,
-          subject: `Comandă nouă ${reference} — ${draft.deliveryMethod === 'easybox' ? 'livrare EasyBox' : 'de trimis prin curier'}`,
-          text,
-          html,
-        })
-      } catch (mailErr) {
-        // Non-fatal — the order is already recorded.
-        console.warn('[libraria] order email to owner skipped:', mailErr.message)
-      }
+      sendMail({ to: owner, subject: `Comandă nouă ${reference} — ${brand}`, text, html }).catch(
+        (mailErr) => console.warn('[libraria] order email to owner skipped:', mailErr.message),
+      )
     }
 
-    // ---- Confirm the order to the CUSTOMER with the exact delivery details. ----
-    // Always one email per order with the EasyBox (name + address) for easybox
-    // deliveries and the basic order summary (items, transport, total).
-    const customerEmail = draft.shipping?.email
-    if (customerEmail) {
-      const { text, html } = buildCustomerEmail({
-        reference,
-        createdAt: draft.createdAt,
-        lines: draft.lines,
-        shipping: draft.shipping,
-        subtotal,
-        deliveryMethod: draft.deliveryMethod,
-        easybox: draft.easybox,
-        shippingCost: draft.shippingCost,
-        total: draft.total,
-      })
-      try {
-        await sendMail({
-          to: customerEmail,
-          subject: `Comandă confirmată ${reference} — ${draft.deliveryMethod === 'easybox' ? 'livrare EasyBox' : 'livrare curier'}`,
-          text,
-          html,
-        })
-      } catch (mailErr) {
-        // Non-fatal — the order is already recorded.
-        console.warn('[libraria] customer confirmation email skipped:', mailErr.message)
-      }
-    }
+    const customerContent = buildCustomerEmail({
+      brand, reference, lines: draft.lines, shipping: draft.shipping, subtotal,
+      deliveryMethod: draft.deliveryMethod, easybox: draft.easybox,
+      shippingCost: draft.shippingCost, total: draft.total, digitalLinks,
+    })
+    sendMail({
+      to: email,
+      subject: `Comandă confirmată ${reference} — ${brand}`,
+      text: customerContent.text,
+      html: customerContent.html,
+    }).catch((mailErr) => console.warn('[libraria] customer confirmation skipped:', mailErr.message))
 
     return res.status(201).json(draft)
   } catch (err) {
-    if (client) await client.query('ROLLBACK').catch(() => {})
-    return res.status(500).json({ error: err.message })
-  } finally {
-    if (client) client.release()
+    return serverError(res, err, 'create-order')
   }
 })
 
-/**
- * GET /api/orders
- * Return the current user's orders (newest first).
- */
-ordersRouter.get('/', requireAuth, async (_req, res) => {
+/** GET /api/orders — the signed-in customer's own orders (newest first). */
+ordersRouter.get('/', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT id FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
-      [_req.user.id],
+      [req.user.id],
     )
     const orders = []
-    for (const row of rows) {
-      orders.push(await fetchOrderWithLines(row.id))
-    }
+    for (const row of rows) orders.push(await fetchOrderWithLines(row.id))
     return res.json(orders)
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    return serverError(res, err, 'list-orders')
+  }
+})
+
+/** GET /api/orders/all — every order, admin only (newest first). */
+ordersRouter.get('/all', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id FROM orders ORDER BY created_at DESC LIMIT 500',
+    )
+    const orders = []
+    for (const row of rows) orders.push(await fetchOrderWithLines(row.id, { admin: true }))
+    return res.json(orders)
+  } catch (err) {
+    return serverError(res, err, 'list-all-orders')
   }
 })
 
 /**
- * GET /api/orders/all
- * Return every order (admin only), newest first.
+ * POST /api/orders/lookup
+ * Public order tracking: reference + the email used at checkout. Both must
+ * match, so knowing a reference alone is not enough to read someone's address.
  */
-ordersRouter.get('/all', requireAdmin, async (_req, res) => {
+ordersRouter.post('/lookup', async (req, res) => {
+  const reference = cleanString(req.body?.reference, 60).toUpperCase()
+  const email = cleanString(req.body?.email, 200).toLowerCase()
+  if (!reference || !isEmail(email)) {
+    return res.status(422).json({ error: 'Completează numărul comenzii și emailul folosit la comandă.' })
+  }
   try {
-    const { rows } = await pool.query('SELECT id FROM orders ORDER BY created_at DESC')
-    const orders = []
-    for (const row of rows) {
-      orders.push(await fetchOrderWithLines(row.id))
+    const { rows } = await pool.query(
+      'SELECT id FROM orders WHERE UPPER(reference) = $1 AND LOWER(ship_email) = $2',
+      [reference, email],
+    )
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Nu am găsit o comandă cu aceste date.' })
     }
-    return res.json(orders)
+    return res.json(await fetchOrderWithLines(rows[0].id))
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    return serverError(res, err, 'lookup-order')
+  }
+})
+
+/**
+ * PATCH /api/orders/:id
+ * Admin: update the order status and/or the internal note. The customer is
+ * emailed when the status changes.
+ */
+ordersRouter.patch('/:id', requireAdmin, async (req, res) => {
+  const status = req.body?.status
+  const hasNote = req.body?.adminNote !== undefined
+  const adminNote = hasNote ? cleanString(req.body.adminNote, 2000) : undefined
+
+  if (status !== undefined && !ORDER_STATUSES.includes(status)) {
+    return res.status(422).json({ error: 'Status de comandă invalid.' })
+  }
+  if (status === undefined && !hasNote) {
+    return res.status(422).json({ error: 'Trimite un status sau o notă.' })
+  }
+
+  try {
+    const current = await fetchOrderWithLines(req.params.id, { admin: true })
+    if (!current) return res.status(404).json({ error: 'Comanda nu a fost găsită.' })
+
+    const nextStatus = status ?? current.status
+    await pool.query(
+      `UPDATE orders SET status = $1${hasNote ? ', admin_note = $3' : ''}, updated_at = now()
+       WHERE id = $2`,
+      hasNote ? [nextStatus, req.params.id, adminNote || null] : [nextStatus, req.params.id],
+    )
+
+    const updated = await fetchOrderWithLines(req.params.id, { admin: true })
+
+    // Notify the customer when the status actually changed.
+    if (status !== undefined && status !== current.status && updated?.shipping?.email) {
+      const brand = await getSiteName()
+      const { text, html } = buildStatusEmail({
+        brand,
+        reference: updated.reference,
+        status,
+        shipping: updated.shipping,
+      })
+      sendMail({
+        to: updated.shipping.email,
+        subject: `Comanda ${updated.reference} — ${ORDER_STATUS_LABELS[status]}`,
+        text,
+        html,
+      }).catch((mailErr) => console.warn('[libraria] status email skipped:', mailErr.message))
+    }
+
+    return res.json(updated)
+  } catch (err) {
+    return serverError(res, err, 'update-order')
   }
 })
 
 /**
  * GET /api/orders/:id
- * Return a single order (by id or reference). Customers may only read their
- * own orders; admins may read any.
+ * Return a single order (by id or reference). Customers may only read their own
+ * orders; admins may read any. Guests use POST /lookup instead.
  */
 ordersRouter.get('/:id', requireAuth, async (req, res) => {
   try {
@@ -498,9 +600,8 @@ ordersRouter.get('/:id', requireAuth, async (req, res) => {
     if (req.user.role !== 'admin' && order.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Acces interzis.' })
     }
-    const orderData = await fetchOrderWithLines(order.id)
-    return res.json(orderData)
+    return res.json(await fetchOrderWithLines(order.id))
   } catch (err) {
-    return res.status(500).json({ error: err.message })
+    return serverError(res, err, 'get-order')
   }
 })

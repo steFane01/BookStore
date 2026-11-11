@@ -44,7 +44,16 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:-libraria_dev_only}
       PGDATABASE: ${POSTGRES_DB:-libraria}
       PORT: 4000
+      # Local stack: keep development mode so the demo-friendly config guards
+      # (JWT fallback, relaxed CSP) are used. Production uses NODE_ENV=production.
+      NODE_ENV: ${NODE_ENV:-development}
+      TRUST_PROXY: "1"
       JWT_SECRET: ${JWT_SECRET:-libraria-dev-secret-change-me}
+      # Owner account created/updated at startup (backend/src/bootstrap.js).
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-0}
       # Mail transport — leave empty to use the local `mailpit` catch-all.
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

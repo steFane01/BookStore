@@ -1,10 +1,21 @@
 import { Link } from 'react-router-dom'
-import { siteConfig } from '../config/site'
+import { useSettings } from '../context/SettingsContext'
+import { usePageMeta } from '../hooks/usePageMeta'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
 import { IconFeather, IconArrowRight } from '../components/icons'
 
 export default function About() {
+  const { settings } = useSettings()
+  usePageMeta(`Despre — ${settings.brandName}`, settings.description)
+
+  const story = settings.aboutText
+    ? settings.aboutText.split(/\n{2,}/).filter(Boolean)
+    : [
+        `${settings.brandNameLong} s-a născut dintr-o convingere simplă: că o carte este mai mult decât un text. Este un obiect care cere să fie ținut în mână, deschis cu grijă, subliniat, împrumutat, iubit.`,
+        'Alegem titluri cu răbdare, lucrăm cu tipografii care încă mai știu să facă lucruri frumoase și ne asumăm să publicăm cărți pe care să le recomandăm necondiționat unui prieten.',
+      ]
+
   return (
     <div className="pt-20 md:pt-24">
       {/* Intro */}
@@ -15,7 +26,7 @@ export default function About() {
             O librărie pentru cei care citesc încet
           </h1>
           <p className="mt-8 font-serif text-xl leading-relaxed text-ink-light">
-            {siteConfig.tagline}
+            {settings.tagline}
           </p>
         </div>
       </AnimatedSection>
@@ -23,21 +34,11 @@ export default function About() {
       {/* Story */}
       <AnimatedSection className="border-y border-ink/10 bg-paper-200/50 py-20">
         <div className="container-page grid gap-10 md:grid-cols-2">
-          <SectionHeading
-            eyebrow="Povestea noastră"
-            title="Am deschis o librărie mică, cu gust mare"
-          />
+          <SectionHeading eyebrow="Povestea noastră" title="Am deschis o librărie mică, cu gust mare" />
           <div className="flex flex-col gap-5 leading-relaxed text-ink-light">
-            <p>
-              {siteConfig.brandNameLong} s-a născut dintr-o convingere simplă: că
-              o carte este mai mult decât un text. Este un obiect care cere să
-              fie ținut în mână, deschis cu grijă, subliniat, împrumutat, iubit.
-            </p>
-            <p>
-              Alegem titluri cu răbdare, lucrăm cu tipografii care încă mai știu
-              să facă lucruri frumoase și ne asumăm să publicăm cărți pe care să
-              le recomandăm necondiționat unui prieten.
-            </p>
+            {story.map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
           </div>
         </div>
       </AnimatedSection>
@@ -70,18 +71,16 @@ export default function About() {
               <IconFeather className="mb-4 h-8 w-8 text-brass-dark" />
               <h3 className="font-serif text-2xl text-ink">Librărie</h3>
               <p className="mt-3 leading-relaxed text-ink-muted">
-                Un stoc atent selectat de ficțiune, eseuri și cărți care merită
-                spațiu în biblioteca ta. Căutăm titluri care ies din val și le
-                punem în față.
+                Un stoc atent selectat de ficțiune, eseuri și cărți care merită spațiu în
+                biblioteca ta. Căutăm titluri care ies din val și le punem în față.
               </p>
             </div>
             <div className="border border-ink/10 bg-paper-50 p-8">
               <IconFeather className="mb-4 h-8 w-8 text-brass-dark" />
               <h3 className="font-serif text-2xl text-ink">Editura</h3>
               <p className="mt-3 leading-relaxed text-ink-muted">
-                Publicăm puține cărți, dar cu grijă: traduceri atente, design
-                editorial atent și o prezență de hârtie care să stea bine pe
-                raftul tău.
+                Publicăm puține cărți, dar cu grijă: traduceri atente, design editorial
+                atent și o prezență de hârtie care să stea bine pe raftul tău.
               </p>
             </div>
           </div>
@@ -91,7 +90,7 @@ export default function About() {
       {/* CTA */}
       <AnimatedSection className="container-page py-20 text-center">
         <p className="font-serif text-2xl italic text-ink-light">
-          Vrei să ne cunoști? Vino să ne vizitezi.
+          Ai o întrebare despre o carte sau o comandă?
         </p>
         <Link to="/contact" className="btn btn-primary mt-6 inline-flex items-center gap-2 px-7 py-3">
           Contactează-ne

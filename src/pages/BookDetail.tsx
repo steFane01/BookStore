@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Book, ProductVariant } from '../types'
 import { bookService } from '../services/bookService'
+import { usePageMeta } from '../hooks/usePageMeta'
+import { useJsonLd } from '../hooks/useJsonLd'
 import { BookCover } from '../components/BookCover'
 import { QuantitySelector } from '../components/QuantitySelector'
 import { AnimatedSection } from '../components/AnimatedSection'
@@ -20,6 +22,33 @@ export default function BookDetail() {
   const [quantity, setQuantity] = useState(1)
   const [added, setAdded] = useState(false)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
+
+  usePageMeta(
+    book ? `${book.title} — ${book.author}` : undefined,
+    book?.shortDescription,
+  )
+  useJsonLd(
+    'product-jsonld',
+    book
+      ? {
+          '@context': 'https://schema.org',
+          '@type': 'Product',
+          name: book.title,
+          description: book.shortDescription || book.description,
+          image: book.cover.src ?? undefined,
+          brand: { '@type': 'Brand', name: 'RV STUDIO' },
+          offers: {
+            '@type': 'Offer',
+            price: book.price,
+            priceCurrency: book.currency || 'RON',
+            availability:
+              book.stock > 0
+                ? 'https://schema.org/InStock'
+                : 'https://schema.org/OutOfStock',
+          },
+        }
+      : null,
+  )
 
   useEffect(() => {
     let active = true
@@ -264,7 +293,7 @@ export default function BookDetail() {
             {book.year && <DetailRow label="An apariție" value={String(book.year)} />}
             {book.language && <DetailRow label="Limbă" value={book.language} />}
             {book.format && <DetailRow label="Format" value={book.format} />}
-            {isDigital && book.digitalFileUrl && (
+            {isDigital && (
               <DetailRow label="Livrare" value="Descărcare instant după comandă" />
             )}
           </dl>

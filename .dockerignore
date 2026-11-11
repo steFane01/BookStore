@@ -8,3 +8,7 @@ dist
 *.md
 .cline
 .dockerignore
+backend
+sql
+poze
+.github

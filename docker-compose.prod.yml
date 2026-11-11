@@ -1,0 +1,98 @@
+# ---------------------------------------------------------------------------
+# Librăria — producție
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Diferențe față de docker-compose.yml (dezvoltare):
+#   - baza de date NU are port public și nu are volum demo
+#   - fără Mailpit: emailul merge prin SMTP real (SMTP_HOST obligatoriu)
+#   - NODE_ENV=production → secretele lipsă opresc pornirea (fail fast)
+#   - variabilele obligatorii sunt marcate cu :? (compose refuză să pornească)
+#   - TLS/HTTPS se termină în reverse proxy-ul de pe host (Caddy/Traefik/nginx)
+#     care redirectează către portul FRONTEND_PORT (80 implicit).
+#
+# Înainte de primul boot: completează `.env` (vezi `.env.example`) cu parole
+# puternice, JWT_SECRET, SMTP și PUBLIC_URL (domeniul real).
+# ---------------------------------------------------------------------------
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?setează POSTGRES_USER în .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?setează POSTGRES_PASSWORD în .env}
+      POSTGRES_DB: ${POSTGRES_DB:?setează POSTGRES_DB în .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    # Portul nu este publicat: baza de date rămâne doar în rețeaua internă.
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      NODE_ENV: production
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:?setează JWT_SECRET (minim 32 caractere)}
+      JWT_TTL: ${JWT_TTL:-7d}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?setează ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?setează ADMIN_PASSWORD (minim 8 caractere)}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-0}
+      SMTP_HOST: ${SMTP_HOST:?setează SMTP_HOST pentru emailuri}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      CONTACT_TO: ${CONTACT_TO:-}
+      PUBLIC_URL: ${PUBLIC_URL:?setează PUBLIC_URL cu domeniul real}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      TRUST_PROXY: "1"
+      SAMEDAY_API: ${SAMEDAY_API:-https://sameday-api.demo.zitec.com}
+      SAMEDAY_USERNAME: ${SAMEDAY_USERNAME:-}
+      SAMEDAY_PASSWORD: ${SAMEDAY_PASSWORD:-}
+      SAMEDAY_REMEMBER_ME: ${SAMEDAY_REMEMBER_ME:-0}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "4000"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  uploads_data:

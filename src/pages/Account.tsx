@@ -7,14 +7,15 @@ import { addressService } from '../services/addressService'
 import { FormField } from '../components/FormField'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
-import { orderStatusLabels } from '../services/authService'
+import { authService, orderStatusLabels } from '../services/authService'
 import { formatPrice } from '../utils/format'
+import { IconLock } from '../components/icons'
 
-type Tab = 'profile' | 'addresses' | 'orders'
+type Tab = 'profile' | 'addresses' | 'orders' | 'security'
 
 export default function Account() {
   const navigate = useNavigate()
-  const { user, isAuthenticated, isAdmin } = useAuth()
+  const { user, isAuthenticated, isAdmin, updateProfile } = useAuth()
 
   const [tab, setTab] = useState<Tab>('profile')
   const [orders, setOrders] = useState<OrderDraft[]>([])
@@ -22,6 +23,7 @@ export default function Account() {
   const [addresses, setAddresses] = useState<CustomerAddress[]>([])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -60,20 +62,30 @@ export default function Account() {
     return null
   }
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setSaveError('Numele nu poate fi gol.')
+      return
+    }
     setSaving(true)
     setSaved(false)
-    // Mock: only the book/admin services mutate data; here we reflect the UI state.
-    window.setTimeout(() => {
-      setSaving(false)
+    setSaveError(null)
+    try {
+      await updateProfile(trimmed)
       setSaved(true)
-    }, 400)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Profilul nu a putut fi salvat.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'profile', label: 'Profil' },
     { key: 'addresses', label: 'Adrese' },
     { key: 'orders', label: 'Comenzile mele' },
+    { key: 'security', label: 'Securitate' },
   ]
 
   return (
@@ -111,6 +123,7 @@ export default function Account() {
               onSave={saveProfile}
               saving={saving}
               saved={saved}
+              error={saveError}
               isAdmin={isAdmin}
             />
           )}
@@ -122,6 +135,7 @@ export default function Account() {
             />
           )}
           {tab === 'orders' && <OrdersTab orders={orders} />}
+          {tab === 'security' && <SecurityTab />}
         </div>
       </AnimatedSection>
     </div>
@@ -135,6 +149,7 @@ function ProfileTab({
   onSave,
   saving,
   saved,
+  error,
   isAdmin,
 }: {
   name: string
@@ -143,6 +158,7 @@ function ProfileTab({
   onSave: () => void
   saving: boolean
   saved: boolean
+  error: string | null
   isAdmin: boolean
 }) {
   return (
@@ -170,6 +186,11 @@ function ProfileTab({
           {saving ? 'Se salvează…' : 'Salvează'}
         </button>
         {saved && <span className="text-sm text-oxblood">Profilul a fost salvat.</span>}
+        {error && (
+          <span className="text-sm text-oxblood" role="alert">
+            {error}
+          </span>
+        )}
       </div>
       {isAdmin && (
         <p className="mt-8 border border-brass/40 bg-brass/5 px-5 py-4 text-sm text-ink">
@@ -462,3 +483,94 @@ function OrdersTab({ orders }: { orders: OrderDraft[] }) {
   )
 }
 
+
+function SecurityTab() {
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setError(null)
+    setDone(false)
+    if (next.length < 8) {
+      setError('Parola nouă trebuie să aibă cel puțin 8 caractere.')
+      return
+    }
+    if (next !== confirm) {
+      setError('Parolele nu coincid.')
+      return
+    }
+    setBusy(true)
+    try {
+      await authService.changePassword(current, next)
+      setDone(true)
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Parola nu a putut fi schimbată.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="max-w-md">
+      <div className="mb-6 flex items-center gap-2 text-ink">
+        <IconLock className="h-5 w-5 text-brass-dark" />
+        <p className="font-serif text-xl">Schimbă parola</p>
+      </div>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <FormField label="Parola actuală" htmlFor="sec-current" required>
+          <input
+            id="sec-current"
+            type="password"
+            className="field"
+            value={current}
+            onChange={(event) => setCurrent(event.target.value)}
+            autoComplete="current-password"
+          />
+        </FormField>
+        <FormField label="Parola nouă" htmlFor="sec-next" required>
+          <input
+            id="sec-next"
+            type="password"
+            className="field"
+            value={next}
+            onChange={(event) => setNext(event.target.value)}
+            autoComplete="new-password"
+          />
+        </FormField>
+        <FormField label="Confirmă parola nouă" htmlFor="sec-confirm" required>
+          <input
+            id="sec-confirm"
+            type="password"
+            className="field"
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+            autoComplete="new-password"
+          />
+        </FormField>
+
+        {error && (
+          <p className="text-sm text-oxblood" role="alert">
+            {error}
+          </p>
+        )}
+        {done && <p className="text-sm text-oxblood">Parola a fost schimbată.</p>}
+
+        <button type="submit" disabled={busy} className="btn btn-primary px-6 py-3 disabled:opacity-60">
+          {busy ? 'Se salvează…' : 'Schimbă parola'}
+        </button>
+      </form>
+      <p className="mt-6 text-xs leading-relaxed text-ink-muted">
+        Folosește o parolă de minim 8 caractere, unică pentru acest cont. Dacă ai uitat
+        parola, te poți deconecta și folosi „Am uitat parola” din pagina de autentificare.
+      </p>
+    </div>
+  )
+}

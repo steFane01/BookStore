@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { siteConfig } from '../config/site'
+import { useSettings } from '../context/SettingsContext'
+import { usePageMeta } from '../hooks/usePageMeta'
 import { submitContact } from '../services/formsService'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
 import { FormField } from '../components/FormField'
-import { IconMail, IconPhone, IconCheck } from '../components/icons'
+import { IconMail, IconPhone, IconCheck, IconMapPin } from '../components/icons'
 
 export default function Contact() {
+  const { settings } = useSettings()
   const [submitted, setSubmitted] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -14,12 +16,13 @@ export default function Contact() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  usePageMeta(`Contact — ${settings.brandName}`, 'Scrie-ne: întrebări despre produse, comenzi sau colaborări.')
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      // Emails the visitor's message TO the site's own mailbox (.env address).
       await submitContact({ name, email, message })
       setSubmitted(true)
       setName('')
@@ -32,23 +35,36 @@ export default function Contact() {
     }
   }
 
-  const { email: contactEmail, phone } = siteConfig.contact
-
   return (
     <div className="pt-20 md:pt-24">
       <AnimatedSection className="container-page py-16 md:py-24">
         <SectionHeading
           eyebrow="Contact"
           title="Hai să vorbim"
-          description="O întrebare despre o carte, o comandă specială sau o propunere de colaborare — îți răspundem cu plăcere."
+          description="O întrebare despre un produs, o comandă sau o propunere de colaborare — îți răspundem cu plăcere."
           align="center"
         />
 
         <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_22rem] lg:items-start">
           {/* Info */}
           <div className="order-2 grid gap-4 lg:order-1">
-            <InfoRow icon={<IconMail className="h-5 w-5" />} label="Email" value={contactEmail} />
-            <InfoRow icon={<IconPhone className="h-5 w-5" />} label="Telefon" value={phone} />
+            {settings.contactEmail && (
+              <InfoRow icon={<IconMail className="h-5 w-5" />} label="Email" value={settings.contactEmail} />
+            )}
+            {settings.contactPhone && (
+              <InfoRow icon={<IconPhone className="h-5 w-5" />} label="Telefon" value={settings.contactPhone} />
+            )}
+            {settings.legalAddress && (
+              <InfoRow icon={<IconMapPin className="h-5 w-5" />} label="Adresă" value={settings.legalAddress} />
+            )}
+            <div className="border border-ink/10 bg-paper-50 p-5 text-sm leading-relaxed text-ink-muted">
+              <p className="font-medium text-ink">Livrare</p>
+              <p className="mt-1">{settings.deliveryInfo}</p>
+              <p className="mt-3 font-medium text-ink">Plată</p>
+              <p className="mt-1">{settings.paymentInfo}</p>
+              <p className="mt-3 font-medium text-ink">Retur</p>
+              <p className="mt-1">{settings.returnsInfo}</p>
+            </div>
           </div>
 
           {/* Form */}
@@ -76,11 +92,7 @@ export default function Contact() {
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={busy}
-              className="btn btn-primary px-6 py-3 disabled:opacity-60"
-            >
+            <button type="submit" disabled={busy} className="btn btn-primary px-6 py-3 disabled:opacity-60">
               {busy ? 'Se trimite…' : 'Trimite mesajul'}
             </button>
           </form>

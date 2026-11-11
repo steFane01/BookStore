@@ -254,6 +254,31 @@ export async function ensureSchema() {
     UPDATE books SET category_id = 'carti' WHERE category_id IS NULL;
   `)
 
+  // ---- variant label on order lines + admin note on orders ----
+  await pool.query(`
+    ALTER TABLE order_lines ADD COLUMN IF NOT EXISTS variant_name TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_note TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+  `)
+
+  // ---- site_settings ---- (owner-editable storefront content, single row)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      id         SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      data       JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `)
+
+  // ---- newsletter_subscribers ---- (real list the owner can export)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+      email      TEXT PRIMARY KEY,
+      source     TEXT NOT NULL DEFAULT 'newsletter-site',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `)
+
   // ---- indexes (IF NOT EXISTS so they're also idempotent) ----
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_books_status      ON books (status);
@@ -267,6 +292,7 @@ export async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_order_lines_order ON order_lines (order_id);
     CREATE INDEX IF NOT EXISTS idx_cart_items_user   ON cart_items (user_id);
     CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets (token_hash);
+    CREATE INDEX IF NOT EXISTS idx_newsletter_created ON newsletter_subscribers (created_at DESC);
   `)
 
   // ---- updated-at maintenance trigger ----

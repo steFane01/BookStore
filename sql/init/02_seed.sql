@@ -19,20 +19,11 @@ ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name, slug = EXCLUDED.slug, blurb = EXCLUDED.blurb, sort = EXCLUDED.sort;
 
 -- ---------------------------------------------------------------------------
--- Users — the demo accounts the UI documents. Real bcrypt hashes (cost 10) so
--- login works out of the box against the real /api/auth/login endpoint:
---   admin@libraria.ro   / admin123
---   cititor@example.com / parola123
+-- Users
+-- -- No account is seeded anymore: the owner account is created at backend
+-- -- startup from ADMIN_EMAIL + ADMIN_PASSWORD (backend/src/bootstrap.js), so no
+-- -- password ever lives in the repository or in the SQL init scripts.
 -- ---------------------------------------------------------------------------
-INSERT INTO users (id, name, email, password_hash, role)
-VALUES
-    ('00000000-0000-0000-0000-000000000001', 'Administrator', 'admin@libraria.ro',
-     '$2a$10$1P0UExHflO8BSj3n1HcYvu6yX3GABTXEbUAp2bnlwEnvlhlScAQkS', 'admin'),
-    ('00000000-0000-0000-0000-000000000002', 'Ioana Popescu', 'cititor@example.com',
-     '$2a$10$xCyhowKmkJrnAMwj52yVPO50jKGs0UMeek7Snl2g5fvIvEqt1x5NS', 'customer')
-ON CONFLICT (email) DO UPDATE SET
-    password_hash = EXCLUDED.password_hash,
-    role = EXCLUDED.role;
 
 
 -- ---------------------------------------------------------------------------

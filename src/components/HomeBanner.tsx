@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ProductCategory } from '../types'
 import { IconArrowRight } from './icons'
+import { useSettings } from '../context/SettingsContext'
 
 interface CategoryShowcaseProps {
   categories: ProductCategory[]
@@ -15,13 +16,14 @@ interface CategoryShowcaseProps {
  * category (`/?categorie=<id>`).
  */
 export function HomeBanner({ categories }: CategoryShowcaseProps) {
+  const { settings } = useSettings()
   return (
     <section className="border-b border-ink/10 bg-paper-100 pb-14 pt-24 md:pb-20 md:pt-32">
       <div className="container-page">
         {/* Shared category artwork */}
         <img
-          src="/welcomepage.jpeg"
-          alt="Colecțiile RV STUDIO — cărți, produse digitale și accesorii"
+          src={settings.heroImage || '/welcomepage.jpeg'}
+          alt={settings.heroAlt || 'Colecțiile RV STUDIO — cărți, produse digitale și accesorii'}
           className="mb-12 h-56 w-full rounded-sm object-cover md:h-72"
         />
 

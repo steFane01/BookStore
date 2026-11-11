@@ -69,35 +69,47 @@ SELECT * FROM books;
 
 ## Backend — implemented endpoints
 
-The `backend/` image serves a real Express API backed by Postgres:
+The `backend/` image serves the real Express API backed by Postgres:
 
-- `GET  /api/health` — live DB connectivity check
+- `GET  /api/health` — DB connectivity check
 - `GET  /api/books` — public active catalog (nested `Book` shape)
-- `GET  /api/books/all` — full catalog incl. drafts (admin)
-- `POST /api/books`, `PUT /api/books/:id`, `DELETE /api/books/:id` — catalog CRUD (admin)
-- `POST /api/auth/register` — create account, persists to `users` with a bcrypt hash
-- `POST /api/auth/login` — authenticate, returns a JWT session token
-- `GET  /api/auth/me` — resolve/restore a session from the stored token
-- `POST /api/auth/request-password-reset` — sends a reset email with a clickable link
-- `POST /api/auth/reset-password` — set a new password via the single-use token
-- `GET  /api/mail/status`, `POST /api/mail/test` — mail diagnostics + test send
-- `POST /api/forms/contact` — email the contact-form message to the owner's mailbox
-- `POST /api/forms/newsletter` — email a newsletter confirmation to the subscriber
-- `POST /api/orders` — place an order: inserts `orders` + `order_lines` atomically,
-  returns the order with a unique registration number (`LB-YYYY-XXXXXX`) and emails
-  the exact delivery details to the owner's mailbox (for the courier partner)
-- `GET  /api/orders` — current user's orders (newest first)
-- `GET  /api/orders/all` — every order (admin only)
-- `GET  /api/orders/:id` — single order by id or reference (customer sees own, admin any)
-- `GET  /api/addresses` — current user's saved addresses
-- `POST /api/addresses` — save a new address for the current user
-- `PUT  /api/addresses/:id` — update one saved address
-- `DELETE /api/addresses/:id` — remove one saved address
+- `GET  /api/books/:id` — single product
+- `GET  /api/books/all` — full catalog incl. drafts + private digital links (admin)
+- `POST/PUT/DELETE /api/books[/:id]` — product CRUD (admin)
+- `GET  /api/books/categories` — storefront categories
+- `POST/PUT/DELETE /api/books/categories[/:id]` — category CRUD (admin)
+- `POST /api/auth/register|login` — accounts with bcrypt hashes + JWT session
+- `GET/PATCH /api/auth/me` — resolve session / update the display name
+- `POST /api/auth/change-password` — change the password while signed in
+- `POST /api/auth/request-password-reset|reset-password` — single-use email tokens
+- `GET/PUT /api/settings` — owner-editable storefront content (brand, contact, legal)
+- `POST /api/forms/contact|newsletter` — public forms (rate limited)
+- `GET/DELETE /api/newsletter[/:email]` + `GET /api/newsletter/export` — subscribers (admin)
+- `POST /api/orders` — place an order (guest or signed-in): prices and stock are
+  re-read from the catalog, stock is reserved inside the transaction, the owner
+  gets the full delivery details by email and the customer gets a confirmation
+  (including download links for digital products)
+- `GET  /api/orders[/all]` — own orders / every order (admin)
+- `POST /api/orders/lookup` — public tracking with reference + checkout email
+- `PATCH /api/orders/:id` — status + internal note (admin); emails the customer
+- `GET/POST/PUT/DELETE /api/addresses[/:id]` — saved addresses (scoped per user)
+- `POST /api/upload` — admin image upload (validated by magic bytes)
+- `GET  /api/easyboxes` — SameDay EasyBox pickup points
+- `GET  /api/mail/status`, `POST /api/mail/test` — SMTP diagnostics (admin only)
+- `GET  /robots.txt`, `GET /sitemap.xml` — SEO files built from `PUBLIC_URL`
 
-`/api/cart` and `/api/users` remain stubbed (501) for a later pass.
+Every public write endpoint is rate limited; auth/admin/order scoping is enforced
+server-side. `/api/cart` and `/api/users` remain stubs.
 
-Demo accounts (seeded with real bcrypt hashes): `admin@libraria.ro / admin123`
-and `cititor@example.com / parola123`.
+## Admin account
+
+No credentials are committed anywhere. At startup the backend creates (or
+updates) the owner account from `ADMIN_EMAIL` + `ADMIN_PASSWORD`
+(`backend/src/bootstrap.js`). Set them in `.env`, restart the backend, then sign
+in at `/autentificare`. You can change the password any time from
+**Cont → Securitate**. The env password is only the *initial* one — it never
+overwrites a password changed in the UI. To force it back from `.env`, set
+`ADMIN_RESET_PASSWORD=1`, restart once, then set it back to `0`.
 
 ## Mail service
 
@@ -113,13 +125,20 @@ A mail stack is included and wired up:
 
 ### Sending a test email
 
+The endpoint is admin-only and requires the session token:
+
 ```bash
-curl -X POST http://localhost:8080/api/mail/test \
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"to":"someone@gmail.com","subject":"Salut de la Librăria"}'
+  -d '{"email":"admin@rvstudio.ro","password":"…"}' | jq -r .token)
+
+curl -X POST http://localhost:8080/api/mail/test \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"someone@gmail.com"}'
 ```
 
-Then open **http://localhost:8025** to see it.
+You can also do it from the UI: **Admin → Setări → Testează emailul**.
 
 ### Delivering to a real inbox (e.g. test to your Gmail now)
 
@@ -175,3 +194,27 @@ therefore:
 - Security: passwords are hashed with **bcrypt** (cost 10); session tokens are
   signed JWTs; admin-only routes reject anonymous (401) and non-admin (403)
   callers.
+
+## Production
+
+Use the production compose file — no public database port, no Mailpit, `NODE_ENV=production`
+and required secrets (the stack refuses to start if one is missing):
+
+```bash
+cp .env.example .env       # completează parole, JWT_SECRET, SMTP, PUBLIC_URL
+# JWT_SECRET: openssl rand -hex 32
+# POSTGRES_PASSWORD / ADMIN_PASSWORD: parole lungi, unice
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Then put a TLS terminator in front (Caddy, Traefik or nginx) that proxies to
+`FRONTEND_PORT` (80 by default) and redirects HTTP → HTTPS. Set `PUBLIC_URL` to
+the real `https://…` domain so email links, `robots.txt` and `sitemap.xml` are
+correct. Back up the `db_data` and `uploads_data` volumes.
+
+## Tests
+
+```bash
+cd backend && npm test      # node --test: pricing/stock, escaping, settings
+cd .. && npm run build      # tsc -b + vite build (what CI runs)
+```

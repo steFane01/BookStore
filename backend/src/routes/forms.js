@@ -1,81 +1,90 @@
 import { Router } from 'express'
+import { pool } from '../db.js'
 import { sendMail, getContactRecipient } from '../mailer.js'
+import { getSiteName } from '../settings.js'
+import { serverError } from '../lib/errors.js'
+import { cleanString, escapeHtml, isEmail } from '../lib/text.js'
 
 export const formsRouter = Router()
 
-/** Loose email validator. */
-function isEmail(value) {
-  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
-}
-
 /**
- * POST /api/contact
+ * POST /api/forms/contact
  *
  * A visitor fills in the public contact form. We email their message TO the
- * site's own mailbox (the address configured in `.env` via SMTP_USER / MAIL_FROM
- * — see `getContactRecipient()`), so the owner receives it. This is the standard
- * "contact form" pattern: the message goes to the site owner, not back to the
- * visitor.
+ * site's own mailbox (CONTACT_TO / SMTP_USER), so the owner receives it. Every
+ * field is HTML-escaped before it lands in the email body.
  */
 formsRouter.post('/contact', async (req, res) => {
-  const { name, email, message } = req.body || {}
-  const senderName = String(name ?? '').trim()
-  const senderEmail = String(email ?? '').trim()
-  const body = String(message ?? '').trim()
+  const name = cleanString(req.body?.name, 120)
+  const email = cleanString(req.body?.email, 200)
+  const message = cleanString(req.body?.message, 4000)
 
-  if (!senderName || !isEmail(senderEmail) || !body) {
+  if (!name || !isEmail(email) || !message) {
     return res.status(422).json({ error: 'Numele, emailul și mesajul sunt obligatorii.' })
   }
 
   const to = getContactRecipient()
   if (!to) {
-    return res.status(500).json({ error: 'Emailul destinatar nu este configurat în .env.' })
+    console.warn('[libraria] contact form: niciun destinatar configurat (CONTACT_TO / SMTP_USER)')
+    return res.status(500).json({ error: 'Formularul nu este configurat. Scrie-ne direct pe email.' })
   }
 
+  const brand = await getSiteName()
   try {
     await sendMail({
       to,
-      subject: `Mesaj din formularul de contact — ${senderName}`,
+      replyTo: email,
+      subject: `Mesaj din formularul de contact — ${name} (${brand})`,
       text:
         `Ai primit un mesaj din formularul de contact:\n\n` +
-        `Nume: ${senderName}\nEmail: ${senderEmail}\n\n${body}`,
+        `Nume: ${name}\nEmail: ${email}\n\n${message}`,
       html:
         `<p><strong>Ai primit un mesaj din formularul de contact:</strong></p>` +
-        `<p><strong>Nume:</strong> ${senderName}<br/>` +
-        `<strong>Email:</strong> <a href="mailto:${senderEmail}">${senderEmail}</a></p>` +
-        `<hr/><div style="white-space:pre-wrap">${String(body).replace(/</g, '&lt;')}</div>`,
+        `<p><strong>Nume:</strong> ${escapeHtml(name)}<br/>` +
+        `<strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>` +
+        `<hr/><div style="white-space:pre-wrap">${escapeHtml(message)}</div>`,
     })
-    res.json({ ok: true })
+    return res.json({ ok: true })
   } catch (err) {
-    res.status(502).json({ error: `Eroare la trimiterea emailului: ${err.message}` })
+    console.error('[libraria] contact form send failed:', err.message)
+    return res.status(502).json({ error: 'Mesajul nu a putut fi trimis. Încearcă din nou.' })
   }
 })
 
 /**
- * POST /api/newsletter
- *
- * A visitor subscribes to the newsletter; we email a confirmation TO the address
- * they typed in the "Mă abonez" field (from the `.env` mail account).
+ * POST /api/forms/newsletter
+ * Stores the subscriber (so the owner has a real list to export) and sends a
+ * confirmation to the address typed in the form.
  */
 formsRouter.post('/newsletter', async (req, res) => {
-  const email = String((req.body || {}).email ?? '').trim()
+  const email = cleanString(req.body?.email, 200).toLowerCase()
   if (!isEmail(email)) {
     return res.status(422).json({ error: 'Adresa de email nu este validă.' })
   }
+
   try {
-    await sendMail({
-      to: email,
-      subject: 'Abonare la newsletter — Librăria',
-      text:
-        'Mulțumim că te-ai abonat la newsletter-ul Librăria.\n\n' +
-        'Vei primi vești despre cărțile noi, din când în când. Cu drag, echipa Librăria.',
-      html:
-        '<p>Mulțumim că te-ai abonat la newsletter-ul <strong>Librăria</strong>.</p>' +
-        '<p>Vei primi vești despre cărțile noi, din când în când.</p>' +
-        '<p style="color:#642A2E">Cu drag, echipa Librăria.</p>',
-    })
-    res.json({ ok: true })
+    await pool.query(
+      `INSERT INTO newsletter_subscribers (email, source) VALUES ($1, 'newsletter-site')
+       ON CONFLICT (email) DO NOTHING`,
+      [email],
+    )
   } catch (err) {
-    res.status(502).json({ error: `Eroare la trimiterea emailului: ${err.message}` })
+    return serverError(res, err, 'newsletter-subscribe')
   }
+
+  const brand = await getSiteName()
+  sendMail({
+    to: email,
+    subject: `Abonare la newsletter — ${brand}`,
+    text:
+      `Mulțumim că te-ai abonat la newsletter-ul ${brand}.\n\n` +
+      `Vei primi vești despre produsele noi, din când în când.\n\n` +
+      `Cu drag, echipa ${brand}.`,
+    html:
+      `<p>Mulțumim că te-ai abonat la newsletter-ul <strong>${escapeHtml(brand)}</strong>.</p>` +
+      `<p>Vei primi vești despre produsele noi, din când în când.</p>` +
+      `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`,
+  }).catch((mailErr) => console.warn('[libraria] newsletter email skipped:', mailErr.message))
+
+  return res.json({ ok: true })
 })

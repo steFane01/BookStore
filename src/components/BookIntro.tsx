@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { siteConfig } from '../config/site'
+import { useSettings } from '../context/SettingsContext'
 import { BrandLogo } from './BrandLogo'
 
 interface BookIntroProps {
@@ -18,6 +18,7 @@ const SESSION_KEY = 'libraria.intro-seen'
 export function BookIntro({ onEnter }: BookIntroProps) {
   const [phase, setPhase] = useState<'cover' | 'opening' | 'hidden'>('cover')
   const [textPhase, setTextPhase] = useState(false)
+  const { settings } = useSettings()
   const timerRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -62,7 +63,7 @@ export function BookIntro({ onEnter }: BookIntroProps) {
       {/* Background — RV STUDIO welcome page artwork */}
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/welcomepage.jpeg')" }}
+        style={{ backgroundImage: `url('${settings.heroImage || '/welcomepage.jpeg'}')` }}
         aria-hidden="true"
       />
       {/* Soft dark overlay for text legibility */}
@@ -81,7 +82,7 @@ export function BookIntro({ onEnter }: BookIntroProps) {
         {/* Ornamental lines */}
         <div className="mb-6 h-px w-40 bg-brass/40" aria-hidden="true" />
         <span className="text-[0.7rem] uppercase tracking-[0.5em] text-brass-light/80">
-          {siteConfig.brandName}
+          {settings.brandName}
         </span>
 
         {/* Brand logo — placeholder (no book cover on the welcome screen) */}
@@ -97,7 +98,7 @@ export function BookIntro({ onEnter }: BookIntroProps) {
           className={`mt-10 max-w-sm text-center font-serif text-lg italic leading-relaxed text-paper-200/90 transition-all duration-1000 ${textPhase ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}
           style={{ transitionDelay: reducedMotion ? '0ms' : '550ms' }}
         >
-          {siteConfig.tagline}
+          {settings.tagline}
         </p>
 
         {/* CTA */}

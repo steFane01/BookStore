@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Book, OrderDraft, ProductCategory } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { bookService } from '../services/bookService'
 import { orderService } from '../services/orderService'
 import { HttpError } from '../services/http'
-import { orderStatusLabels } from '../services/authService'
 import { formatPrice } from '../utils/format'
-import { FormField } from '../components/FormField'
-import { IconBook, IconCart, IconCheck, IconPlus, IconTrash, IconEdit } from '../components/icons'
+import { usePageMeta } from '../hooks/usePageMeta'
 import { BookFormModal } from '../components/BookFormModal'
+import { IconBook, IconCart, IconPlus, IconTrash, IconEdit, IconCheck } from '../components/icons'
+import { AdminOrders } from './admin/AdminOrders'
+import { AdminCategories } from './admin/AdminCategories'
+import { AdminSettings } from './admin/AdminSettings'
+import { AdminNewsletter } from './admin/AdminNewsletter'
 
-type Tab = 'dashboard' | 'catalog' | 'orders' | 'settings'
+type Tab = 'dashboard' | 'catalog' | 'categories' | 'orders' | 'newsletter' | 'settings'
 
 export default function Admin() {
   const navigate = useNavigate()
@@ -24,6 +27,8 @@ export default function Admin() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
+  usePageMeta('Administrare')
+
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) {
       navigate('/autentificare', { replace: true })
@@ -31,67 +36,56 @@ export default function Admin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isAdmin])
 
-  useEffect(() => {
+  const loadAll = useCallback(async () => {
     if (!isAuthenticated || !isAdmin) return
-    let active = true
-    ;(async () => {
-      setLoadError(null)
-      try {
-        const [b, c, o] = await Promise.all([
-          bookService.getAllBooks(),
-          bookService.getCategories(),
-          orderService.getOrders(),
-        ])
-        if (!active) return
-        setBooks(b)
-        setCategories(c)
-        setOrders(o)
-        setLoading(false)
-      } catch (err) {
-        if (!active) return
-        // An expired/invalid session shows up as a 401 on the admin endpoints.
-        // Clear it and send the user back to the login screen instead of leaving
-        // the page stuck on the loading spinner ("pending") forever.
-        if (err instanceof HttpError && err.status === 401) {
-          logout()
-          navigate('/autentificare', { replace: true })
-          return
-        }
-        setLoadError(err instanceof Error ? err.message : 'Nu am putut încărca datele.')
-        setLoading(false)
+    setLoadError(null)
+    try {
+      const [bookList, categoryList, orderList] = await Promise.all([
+        bookService.getAllBooks(),
+        bookService.getCategories(),
+        orderService.getOrders(),
+      ])
+      setBooks(bookList)
+      setCategories(categoryList)
+      setOrders(orderList)
+    } catch (err) {
+      // An expired/invalid session shows up as a 401 — clear it and re-login
+      // instead of leaving the page stuck on the loading spinner forever.
+      if (err instanceof HttpError && err.status === 401) {
+        logout()
+        navigate('/autentificare', { replace: true })
+        return
       }
-    })()
-    return () => {
-      active = false
+      setLoadError(err instanceof Error ? err.message : 'Nu am putut încărca datele.')
+    } finally {
+      setLoading(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, isAdmin])
 
+  useEffect(() => {
+    void loadAll()
+  }, [loadAll])
+
   const stats = useMemo(() => {
-    const activeBooks = books.filter((b) => b.status === 'active').length
-    const totalStock = books.reduce((s, b) => s + b.stock, 0)
-    const pendingOrders = orders.filter((o) => o.status === 'pending').length
-    const revenue = orders.reduce((s, o) => s + o.subtotal, 0)
-    return { totalBooks: books.length, activeBooks, totalStock, pendingOrders, revenue }
+    const activeBooks = books.filter((book) => book.status === 'active').length
+    const totalStock = books.reduce((sum, book) => sum + book.stock, 0)
+    const pendingOrders = orders.filter((order) => order.status === 'pending').length
+    const revenue = orders
+      .filter((order) => order.status !== 'cancelled')
+      .reduce((sum, order) => sum + (order.total ?? order.subtotal), 0)
+    const lowStock = books.filter((book) => book.status === 'active' && book.stock <= 3).length
+    return { totalBooks: books.length, activeBooks, totalStock, pendingOrders, revenue, lowStock }
   }, [books, orders])
 
-  if (!isAuthenticated || !isAdmin) {
-    return null
-  }
-
-  const refreshBooks = async () => {
-    try {
-      setLoadError(null)
-      setBooks(await bookService.getAllBooks())
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Nu am putut reîncărca catalogul.')
-    }
-  }
+  if (!isAuthenticated || !isAdmin) return null
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'dashboard', label: 'Prezentare generală' },
-    { key: 'catalog', label: 'Catalog' },
+    { key: 'catalog', label: 'Produse' },
+    { key: 'categories', label: 'Categorii' },
     { key: 'orders', label: 'Comenzi' },
+    { key: 'newsletter', label: 'Abonați' },
     { key: 'settings', label: 'Setări' },
   ]
 
@@ -112,31 +106,36 @@ export default function Admin() {
           <div className="mb-6 rounded border border-oxblood/30 bg-oxblood/5 px-4 py-3 text-sm text-oxblood" role="alert">
             <p className="font-medium">A apărut o problemă la încărcarea datelor.</p>
             <p className="mt-1 text-oxblood/80">{loadError}</p>
+            <button onClick={() => void loadAll()} className="mt-3 underline underline-offset-2">
+              Reîncearcă
+            </button>
           </div>
         )}
 
         <div className="flex flex-wrap gap-2 border-b border-ink/10 pb-4">
-          {tabs.map((t) => (
+          {tabs.map((item) => (
             <button
-              key={t.key}
+              key={item.key}
               type="button"
-              onClick={() => setTab(t.key)}
+              onClick={() => setTab(item.key)}
               className={`px-4 py-2 text-sm uppercase tracking-wider transition-colors ${
-                tab === t.key ? 'bg-ink text-paper-50' : 'text-ink-muted hover:text-ink'
+                tab === item.key ? 'bg-ink text-paper-50' : 'text-ink-muted hover:text-ink'
               }`}
             >
-              {t.label}
+              {item.label}
             </button>
           ))}
         </div>
 
         <div className="mt-8">
           {tab === 'dashboard' && <DashboardTab stats={stats} books={books} categories={categories} />}
-          {tab === 'catalog' && (
-            <CatalogTab books={books} categories={categories} onRefresh={refreshBooks} />
+          {tab === 'catalog' && <CatalogTab books={books} categories={categories} onRefresh={loadAll} />}
+          {tab === 'categories' && (
+            <AdminCategories categories={categories} books={books} onRefresh={loadAll} />
           )}
-          {tab === 'orders' && <OrdersTab orders={orders} />}
-          {tab === 'settings' && <SettingsTab />}
+          {tab === 'orders' && <AdminOrders orders={orders} onRefresh={loadAll} />}
+          {tab === 'newsletter' && <AdminNewsletter />}
+          {tab === 'settings' && <AdminSettings />}
         </div>
       </div>
     </div>
@@ -154,65 +153,59 @@ function DashboardTab({
     totalStock: number
     pendingOrders: number
     revenue: number
+    lowStock: number
   }
   books: Book[]
   categories: ProductCategory[]
 }) {
   const cards = [
-    { label: 'Cărți în catalog', value: String(stats.totalBooks), icon: IconBook },
-    { label: 'Cărți active', value: String(stats.activeBooks), icon: IconBook },
+    { label: 'Produse în catalog', value: String(stats.totalBooks), icon: IconBook },
+    { label: 'Produse publicate', value: String(stats.activeBooks), icon: IconBook },
     { label: 'Exemplare în stoc', value: String(stats.totalStock), icon: IconBook },
     { label: 'Comenzi în așteptare', value: String(stats.pendingOrders), icon: IconCart },
   ]
 
-  // Break the catalog down by category so the admin can see each one separately.
   const byCategory = categories
-    .map((c) => {
-      const items = books.filter((b) => b.categoryId === c.id)
+    .map((category) => {
+      const items = books.filter((book) => book.categoryId === category.id)
       return {
-        category: c,
+        category,
         total: items.length,
-        active: items.filter((b) => b.status === 'active').length,
+        active: items.filter((book) => book.status === 'active').length,
       }
     })
     .sort((a, b) => (a.category.sort ?? 0) - (b.category.sort ?? 0))
-  // Books that have no recognised category ID fall back to their legacy label.
+
   const uncategorized = books.filter(
-    (b) => !b.categoryId || !categories.some((c) => c.id === b.categoryId),
+    (book) => !book.categoryId || !categories.some((category) => category.id === book.categoryId),
   )
+
+  const lowStock = books.filter((book) => book.status === 'active' && book.stock <= 3)
 
   return (
     <div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => (
-          <div key={c.label} className="border border-ink/10 bg-paper-50 p-6">
-            <c.icon className="mb-4 h-7 w-7 text-brass-dark" />
-            <p className="font-serif text-4xl text-ink">{c.value}</p>
-            <p className="mt-1 text-sm text-ink-muted">{c.label}</p>
+        {cards.map((card) => (
+          <div key={card.label} className="border border-ink/10 bg-paper-50 p-6">
+            <card.icon className="mb-4 h-7 w-7 text-brass-dark" />
+            <p className="font-serif text-4xl text-ink">{card.value}</p>
+            <p className="mt-1 text-sm text-ink-muted">{card.label}</p>
           </div>
         ))}
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="border border-ink/10 bg-paper-50 p-6">
-          <p className="text-sm uppercase tracking-wider text-ink-muted">
-            Cărți pe categorie
-          </p>
+          <p className="text-sm uppercase tracking-wider text-ink-muted">Produse pe categorie</p>
           <ul className="mt-4 space-y-3">
             {byCategory.map(({ category, total, active }) => (
               <li
                 key={category.id}
                 className="flex items-center justify-between gap-4 border-b border-ink/10 pb-3 last:border-0"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-serif text-ink">
-                    {category.name}
-                  </span>
-                </div>
+                <span className="font-serif text-ink">{category.name}</span>
                 <div className="flex items-center gap-3 text-sm">
-                  <span className="text-ink-muted">
-                    {active} active
-                  </span>
+                  <span className="text-ink-muted">{active} publicate</span>
                   <span className="font-serif text-lg text-ink">{total}</span>
                 </div>
               </li>
@@ -220,26 +213,38 @@ function DashboardTab({
             {uncategorized.length > 0 && (
               <li className="flex items-center justify-between gap-4 border-b border-ink/10 pb-3 last:border-0">
                 <span className="font-serif text-ink">Fără categorie</span>
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="text-ink-muted">—</span>
-                  <span className="font-serif text-lg text-ink">{uncategorized.length}</span>
-                </div>
+                <span className="font-serif text-lg text-ink">{uncategorized.length}</span>
               </li>
             )}
           </ul>
         </div>
 
-        <div className="border border-ink/10 bg-paper-50 p-6">
-          <p className="text-sm uppercase tracking-wider text-ink-muted">
-            Valoare totală comenzi
-          </p>
-          <p className="mt-2 font-serif text-3xl text-ink">{formatPrice(stats.revenue)}</p>
+        <div className="flex flex-col gap-6">
+          <div className="border border-ink/10 bg-paper-50 p-6">
+            <p className="text-sm uppercase tracking-wider text-ink-muted">Valoare totală comenzi</p>
+            <p className="mt-2 font-serif text-3xl text-ink">{formatPrice(stats.revenue)}</p>
+            <p className="mt-1 text-xs text-ink-muted">Fără comenzile anulate.</p>
+          </div>
+          <div className="border border-ink/10 bg-paper-50 p-6">
+            <p className="text-sm uppercase tracking-wider text-ink-muted">Stoc scăzut</p>
+            <p className="mt-2 font-serif text-3xl text-ink">{stats.lowStock}</p>
+            {lowStock.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-sm text-ink-muted">
+                {lowStock.slice(0, 5).map((book) => (
+                  <li key={book.id}>
+                    {book.title} — {book.stock} buc.
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-ink-muted">Toate produsele au stoc suficient.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
   )
 }
-
 
 function CatalogTab({
   books,
@@ -253,51 +258,50 @@ function CatalogTab({
   const [editing, setEditing] = useState<Book | null | 'new'>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
-  const categoryName = (b: Book): string => {
-    if (b.categoryId) {
-      const cat = categories.find((c) => c.id === b.categoryId)
-      if (cat) return cat.name
+  const categoryName = (book: Book): string => {
+    if (book.categoryId) {
+      const category = categories.find((item) => item.id === book.categoryId)
+      if (category) return category.name
     }
-    return b.category?.trim() || 'Fără categorie'
+    return book.category?.trim() || 'Fără categorie'
   }
 
   const visibleBooks = useMemo(
     () =>
       categoryFilter === 'all'
         ? books
-        : books.filter((b) => b.categoryId === categoryFilter),
+        : books.filter((book) => book.categoryId === categoryFilter),
     [books, categoryFilter],
   )
 
   const countFor = (id: string | 'all') =>
-    id === 'all' ? books.length : books.filter((b) => b.categoryId === id).length
+    id === 'all' ? books.length : books.filter((book) => book.categoryId === id).length
 
-  const remove = async (id: string) => {
-    setBusy(id)
+  const remove = async (book: Book) => {
+    if (!window.confirm(`Ștergi definitiv produsul „${book.title}”?`)) return
+    setBusy(book.id)
     setActionError(null)
     try {
-      await bookService.deleteBook(id)
+      await bookService.deleteBook(book.id)
+      await onRefresh()
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Cartea nu a putut fi ștearsă.')
+      setActionError(err instanceof Error ? err.message : 'Produsul nu a putut fi șters.')
+    } finally {
       setBusy(null)
-      return
     }
-    setBusy(null)
-    await onRefresh()
   }
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink-muted">
-          {books.length} titluri în catalog
+          {books.length} produse în catalog
           {categoryFilter !== 'all' && (
             <span className="text-ink">
               {' '}
-              · {visibleBooks.length} în „{categories.find((c) => c.id === categoryFilter)?.name ?? categoryFilter}”
+              · {visibleBooks.length} în „{categories.find((item) => item.id === categoryFilter)?.name ?? categoryFilter}”
             </span>
           )}
         </p>
@@ -307,7 +311,7 @@ function CatalogTab({
           className="btn btn-primary inline-flex items-center gap-2 px-5 py-2.5"
         >
           <IconPlus className="h-4 w-4" />
-          Adaugă carte
+          Adaugă produs
         </button>
       </div>
 
@@ -326,18 +330,18 @@ function CatalogTab({
         {categories
           .slice()
           .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
-          .map((c) => (
+          .map((category) => (
             <button
-              key={c.id}
+              key={category.id}
               type="button"
-              onClick={() => setCategoryFilter(categoryFilter === c.id ? 'all' : c.id)}
+              onClick={() => setCategoryFilter(categoryFilter === category.id ? 'all' : category.id)}
               className={`px-3 py-1.5 text-xs uppercase tracking-wider transition-colors ${
-                categoryFilter === c.id
+                categoryFilter === category.id
                   ? 'bg-ink text-paper-50'
                   : 'border border-ink/15 text-ink-muted hover:text-ink'
               }`}
             >
-              {c.name} ({countFor(c.id)})
+              {category.name} ({countFor(category.id)})
             </button>
           ))}
       </div>
@@ -350,12 +354,11 @@ function CatalogTab({
       )}
 
       <div className="overflow-x-auto border border-ink/10">
-        <table className="w-full min-w-[40rem] border-collapse text-left">
+        <table className="w-full min-w-[44rem] border-collapse text-left">
           <thead>
             <tr className="border-b border-ink/10 bg-paper-200/50 text-xs uppercase tracking-wider text-ink-muted">
               <th className="px-4 py-3">Titlu</th>
               <th className="px-4 py-3">Categorie</th>
-              <th className="px-4 py-3">Autor</th>
               <th className="px-4 py-3">Preț</th>
               <th className="px-4 py-3">Stoc</th>
               <th className="px-4 py-3">Status</th>
@@ -363,43 +366,50 @@ function CatalogTab({
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/10">
-            {visibleBooks.map((b) => (
-              <tr key={b.id} className="text-sm text-ink">
-                <td className="px-4 py-3 font-serif">{b.title}</td>
+            {visibleBooks.map((book) => (
+              <tr key={book.id} className="text-sm text-ink">
+                <td className="px-4 py-3">
+                  <p className="font-serif">{book.title}</p>
+                  <p className="text-xs text-ink-muted">{book.author}</p>
+                </td>
                 <td className="px-4 py-3">
                   <span className="inline-block rounded-full border border-ink/15 px-2.5 py-0.5 text-xs text-ink-muted">
-                    {categoryName(b)}
+                    {categoryName(book)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-ink-light">{b.author}</td>
-                <td className="px-4 py-3">{formatPrice(b.price)}</td>
-                <td className="px-4 py-3">{b.stock}</td>
+                <td className="px-4 py-3">{formatPrice(book.price)}</td>
+                <td className="px-4 py-3">
+                  <span className={book.stock <= 3 ? 'text-oxblood' : ''}>
+                    {book.stock}
+                    {book.stock <= 3 ? ' ⚠' : ''}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className={`inline-flex items-center gap-1.5 ${
-                      b.status === 'active' ? 'text-oxblood' : 'text-ink-muted'
+                      book.status === 'active' ? 'text-oxblood' : 'text-ink-muted'
                     }`}
                   >
                     <IconCheck className="h-4 w-4" />
-                    {b.status === 'active' ? 'Publicată' : 'Ciornă'}
+                    {book.status === 'active' ? 'Publicat' : 'Ciornă'}
                   </span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-3">
                     <button
                       type="button"
-                      onClick={() => setEditing(b)}
+                      onClick={() => setEditing(book)}
                       className="inline-flex items-center gap-1 text-ink-muted transition-colors hover:text-ink"
-                      aria-label={`Editează ${b.title}`}
+                      aria-label={`Editează ${book.title}`}
                     >
                       <IconEdit className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
-                      onClick={() => remove(b.id)}
-                      disabled={busy === b.id}
+                      onClick={() => void remove(book)}
+                      disabled={busy === book.id}
                       className="inline-flex items-center gap-1 text-oxblood transition-opacity disabled:opacity-40"
-                      aria-label={`Șterge ${b.title}`}
+                      aria-label={`Șterge ${book.title}`}
                     >
                       <IconTrash className="h-4 w-4" />
                     </button>
@@ -409,10 +419,10 @@ function CatalogTab({
             ))}
             {visibleBooks.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-ink-muted">
+                <td colSpan={6} className="px-4 py-8 text-center text-ink-muted">
                   {categoryFilter === 'all'
-                    ? 'Catalogul este gol.'
-                    : 'Nu există titluri în această categorie.'}
+                    ? 'Catalogul este gol. Adaugă primul produs.'
+                    : 'Nu există produse în această categorie.'}
                 </td>
               </tr>
             )}
@@ -421,97 +431,26 @@ function CatalogTab({
       </div>
 
       {editing === 'new' ? (
-        <BookFormModal book={null} categories={categories} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await onRefresh() }} />
+        <BookFormModal
+          book={null}
+          categories={categories}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null)
+            await onRefresh()
+          }}
+        />
       ) : editing ? (
-        <BookFormModal book={editing} categories={categories} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await onRefresh() }} />
+        <BookFormModal
+          book={editing}
+          categories={categories}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null)
+            await onRefresh()
+          }}
+        />
       ) : null}
     </div>
   )
 }
-
-
-function OrdersTab({ orders }: { orders: OrderDraft[] }) {
-  if (orders.length === 0) {
-    return <p className="text-sm text-ink-muted">Nu există comenzi înregistrate.</p>
-  }
-
-  return (
-    <div className="max-w-3xl">
-      <ul className="divide-y divide-ink/10 border border-ink/10">
-        {orders.map((o) => (
-          <li key={o.id} className="px-5 py-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-serif text-lg text-ink">{o.reference}</p>
-                <p className="text-xs text-ink-muted">
-                  {new Date(o.createdAt).toLocaleDateString('ro-RO')} · {o.shipping.fullName}
-                </p>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="font-serif text-lg text-ink">{formatPrice(o.total ?? o.subtotal)}</span>
-                <span className="rounded-full border border-ink/15 px-3 py-1 text-xs uppercase tracking-wider text-ink-muted">
-                  {orderStatusLabels[o.status]}
-                </span>
-              </div>
-            </div>
-            <div className="mt-2 text-xs text-ink-muted">
-              {o.deliveryMethod === 'easybox'
-                ? `Livrare EasyBox — ${o.easybox?.name ?? '—'}`
-                : 'Livrare curier (acasă)'}
-              {o.shippingCost != null && ` · ${formatPrice(o.shippingCost)} livrare`}
-            </div>
-            <ul className="mt-3 space-y-1 border-t border-ink/10 pt-3 text-sm text-ink-light">
-              {o.lines.map((line) => (
-                <li key={`${line.bookId}-${line.title}`}>
-                  {line.title} × {line.quantity}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function SettingsTab() {
-  const [email, setEmail] = useState(() => {
-    try {
-      return window.localStorage.getItem('libraria.settings-email') ?? 'bună@libraria.ro'
-    } catch {
-      return 'bună@libraria.ro'
-    }
-  })
-  const [saved, setSaved] = useState(false)
-
-  const save = () => {
-    try {
-      window.localStorage.setItem('libraria.settings-email', email)
-    } catch {
-      // ignore
-    }
-    setSaved(true)
-    window.setTimeout(() => setSaved(false), 1500)
-  }
-
-  return (
-    <div className="max-w-md">
-      <p className="mb-6 text-sm text-ink-muted">
-        Setările de mai jos sunt demonstrative și se păstrează doar în acest
-        browser.
-      </p>
-      <div className="flex flex-col gap-4">
-        <FormField label="Email de contact" htmlFor="set-email">
-          <input id="set-email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </FormField>
-      </div>
-      <div className="mt-6 flex items-center gap-4">
-        <button type="button" onClick={save} className="btn btn-primary px-6 py-3">
-          Salvează setările
-        </button>
-        {saved && <span className="text-sm text-oxblood">Salvate.</span>}
-      </div>
-    </div>
-  )
-}
-

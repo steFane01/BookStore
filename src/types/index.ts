@@ -172,6 +172,9 @@ export interface OrderDraft {
   payment: null
   status: OrderStatus
   createdAt: string
+  /** Admin's internal note (only returned to the owner). */
+  adminNote?: string
+  updatedAt?: string
   userId?: string
 }
 

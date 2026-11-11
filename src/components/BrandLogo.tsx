@@ -1,4 +1,4 @@
-import { siteConfig } from '../config/site'
+import { useSettings } from '../context/SettingsContext'
 
 interface BrandLogoProps {
   /** Light variant (text on dark background) for dark hero surfaces. */
@@ -13,15 +13,16 @@ interface BrandLogoProps {
  * ornamental monogram should the image ever fail to load.
  */
 export function BrandLogo({ className = '' }: BrandLogoProps) {
+  const { settings } = useSettings()
   return (
     <div
       className={`relative flex items-center justify-center overflow-hidden ${className}`}
       role="img"
-      aria-label={`Logo ${siteConfig.brandName}`}
+      aria-label={`Logo ${settings.brandName}`}
     >
       <img
-        src="/logo_books.jpeg"
-        alt={`Logo ${siteConfig.brandName}`}
+        src={settings.logoImage || '/logo_books.jpeg'}
+        alt={`Logo ${settings.brandName}`}
         className="h-full w-full object-contain"
         loading="eager"
         onError={(e) => {
@@ -34,7 +35,7 @@ export function BrandLogo({ className = '' }: BrandLogoProps) {
         className="absolute inset-0 flex items-center justify-center"
         aria-hidden="true"
       >
-        <span className="sr-only">{siteConfig.brandName}</span>
+        <span className="sr-only">{settings.brandName}</span>
       </span>
     </div>
   )

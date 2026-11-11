@@ -18,6 +18,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => void
+  /** Persist a new display name and refresh the local user. */
+  updateProfile: (name: string) => Promise<void>
   /** Request a password reset; resolves silently (mock only). */
   requestPasswordReset: (email: string) => Promise<void>
 }
@@ -73,6 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const updateProfile = useCallback(async (name: string) => {
+    const updated = await authService.updateProfile(name)
+    setUser(updated)
+    try {
+      window.localStorage.setItem(USER_KEY, JSON.stringify(updated))
+    } catch {
+      // ignore
+    }
+  }, [])
+
   const logout = useCallback(() => {
     setUser(null)
     setToken(null)
@@ -95,9 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      updateProfile,
       requestPasswordReset,
     }),
-    [user, login, register, logout, requestPasswordReset],
+    [user, login, register, logout, updateProfile, requestPasswordReset],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

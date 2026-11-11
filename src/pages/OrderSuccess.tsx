@@ -1,32 +1,68 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { OrderDraft } from '../types'
 import { orderService } from '../services/orderService'
+import { useAuth } from '../context/AuthContext'
+import { usePageMeta } from '../hooks/usePageMeta'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
-import { formatPrice } from '../utils/format'
+import { FormField } from '../components/FormField'
+import { OrderDetails } from '../components/OrderDetails'
 import { IconCheck } from '../components/icons'
 
 export default function OrderSuccess() {
-  const { id } = useParams<{ id: string }>()
+  const { id: reference } = useParams<{ id: string }>()
+  const location = useLocation()
   const navigate = useNavigate()
-  const [order, setOrder] = useState<OrderDraft | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { isAuthenticated } = useAuth()
 
+  const initial = (location.state as { order?: OrderDraft } | null)?.order ?? null
+  const [order, setOrder] = useState<OrderDraft | null>(initial)
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(!initial)
+
+  usePageMeta('Comandă înregistrată')
+
+  // On reload the router state is gone. A signed-in customer can read the order
+  // directly; guests confirm the email used at checkout.
   useEffect(() => {
     let active = true
+    if (initial || !reference || !isAuthenticated) {
+      setChecking(false)
+      return
+    }
     ;(async () => {
-      const data = id ? await orderService.getOrderById(id) : undefined
-      if (!active) return
-      setOrder(data ?? null)
-      setLoading(false)
+      try {
+        const data = await orderService.getOrderById(reference)
+        if (active) setOrder(data)
+      } catch {
+        // Not their order (or a guest) — fall through to the email form.
+      } finally {
+        if (active) setChecking(false)
+      }
     })()
     return () => {
       active = false
     }
-  }, [id])
+  }, [initial, reference, isAuthenticated])
 
-  if (loading) {
+  const lookup = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!reference) return
+    setBusy(true)
+    setError(null)
+    try {
+      setOrder(await orderService.lookup(reference, email))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Comanda nu a putut fi găsită.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (checking) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <span className="inline-block h-10 w-10 animate-spin rounded-full border-2 border-brass border-t-transparent" />
@@ -36,11 +72,42 @@ export default function OrderSuccess() {
 
   if (!order) {
     return (
-      <div className="container-page flex min-h-screen flex-col items-center justify-center gap-6 text-center">
-        <h1 className="font-serif text-4xl text-ink">Comanda nu a fost găsită.</h1>
-        <button onClick={() => navigate('/')} className="btn btn-primary px-6 py-3">
-          Înapoi la librărie
-        </button>
+      <div className="pt-20 md:pt-24">
+        <AnimatedSection className="container-page max-w-md py-16">
+          <SectionHeading
+            eyebrow="Comanda ta"
+            title="Confirmă emailul pentru a vedea comanda"
+            description={
+              reference
+                ? `Comanda ${reference} a fost găsită. Introdu emailul folosit la comandă.`
+                : 'Introdu numărul comenzii și emailul folosit la comandă.'
+            }
+            align="center"
+          />
+          <form onSubmit={lookup} className="mt-8 flex flex-col gap-4">
+            <FormField label="Email" htmlFor="os-email" required>
+              <input
+                id="os-email"
+                type="email"
+                className="field"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+              />
+            </FormField>
+            {error && (
+              <p className="text-sm text-oxblood" role="alert">
+                {error}
+              </p>
+            )}
+            <button type="submit" disabled={busy} className="btn btn-primary px-6 py-3 disabled:opacity-60">
+              {busy ? 'Se caută…' : 'Vezi comanda'}
+            </button>
+            <button type="button" onClick={() => navigate('/')} className="text-sm text-ink-muted underline underline-offset-2">
+              Înapoi la magazin
+            </button>
+          </form>
+        </AnimatedSection>
       </div>
     )
   }
@@ -59,156 +126,55 @@ export default function OrderSuccess() {
             align="center"
           />
           <p className="mx-auto mt-6 max-w-lg text-ink-muted">
-            Comanda ta a fost înregistrată cu succes. Nu se plătește nimic online —
-            detaliile de livrare au fost transmise echipei noastre, iar tu vei fi
-            contactat(ă) pentru a stabili livrarea.
+            Nu se plătește nimic online. Detaliile au fost trimise echipei noastre, iar tu
+            vei fi contactat(ă) pentru confirmarea livrării.
           </p>
         </div>
 
-        {/* Suggestive "what happens next" panel — reassures the user this is real. */}
+        <div className="mt-10">
+          <OrderDetails order={order} />
+        </div>
+
+        {/* What happens next */}
         <div className="mx-auto mt-10 max-w-4xl overflow-hidden rounded-lg border border-brass/30 bg-paper-50">
           <div className="border-b border-brass/20 bg-brass/5 px-6 py-4">
             <h3 className="font-serif text-xl text-ink">Ce se întâmplă mai departe?</h3>
-            <p className="mt-1 text-sm text-ink-muted">
-              Iată pașii pe care îi facem noi, în spate, pentru a-ți livra cărțile.
-            </p>
           </div>
           <ol className="divide-y divide-ink/10">
             <li className="flex gap-4 px-6 py-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">
-                1
-              </span>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">1</span>
               <div>
                 <p className="font-medium text-ink">Am primit comanda ta</p>
-                <p className="text-sm text-ink-muted">
-                  Datele tale de livrare au ajuns la echipa noastră, exact așa cum le-ai
-                  completat. Comanda are numărul de înregistrare{' '}
-                  <span className="font-semibold text-brass-dark">{order.reference}</span>.
-                </p>
+                <p className="text-sm text-ink-muted">Ai primit și un email de confirmare cu detaliile comenzii.</p>
               </div>
             </li>
             <li className="flex gap-4 px-6 py-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">
-                2
-              </span>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">2</span>
               <div>
-                <p className="font-medium text-ink">Pregătim livrarea cu partenerul nostru de curierat</p>
-                <p className="text-sm text-ink-muted">
-                  Lucrăm direct cu o firmă de curierat. Le transmitem exact adresa și
-                  datele de contact pe care le-ai furnizat, ca să ajungem la tine fără
-                  complicații.
-                </p>
+                <p className="font-medium text-ink">Pregătim produsele</p>
+                <p className="text-sm text-ink-muted">Te contactăm telefonic sau pe email pentru confirmare.</p>
               </div>
             </li>
             <li className="flex gap-4 px-6 py-4">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">
-                3
-              </span>
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-brass/40 font-serif text-brass-dark">3</span>
               <div>
-                <p className="font-medium text-ink">Te contactăm pentru livrare</p>
+                <p className="font-medium text-ink">Livrăm</p>
                 <p className="text-sm text-ink-muted">
-                  Vei fi sunat(ă) sau contactat(ă) pe email pentru a stabili data și
-                  detaliile livrării. Echipa noastră îți va confirma totul personal, înainte
-                  ca pachetul să plece.
+                  {order.deliveryMethod === 'easybox'
+                    ? 'Expediem către EasyBox-ul ales, prin curier.'
+                    : 'Expediem prin curier la adresa indicată.'}
                 </p>
               </div>
             </li>
           </ol>
-          <div className="border-t border-ink/10 px-6 py-4">
-            <p className="text-sm text-ink-muted">
-              <span className="font-medium text-ink">Vrei să urmărești comanda?</span>{' '}
-              Intră în{' '}
-              <button onClick={() => navigate('/cont')} className="text-brass-dark underline underline-offset-2 hover:text-ink">
-                contul tău
-              </button>{' '}
-              la secțiunea „Comenzile mele” — o vei găsi acolo cu numărul de înregistrare.
-            </p>
-          </div>
         </div>
 
-        <div className="mx-auto mt-12 grid max-w-4xl gap-8 md:grid-cols-[1fr_20rem] md:items-start">
-          {/* Order details */}
-          <div className="border border-ink/10 bg-paper-50">
-            <h3 className="border-b border-ink/10 px-6 py-4 font-serif text-xl text-ink">
-              Detaliile comenzii
-            </h3>
-            <ul className="divide-y divide-ink/10">
-              {order.lines.map((item) => (
-                <li
-                  key={`${item.bookId}-${item.title}`}
-                  className="flex items-center justify-between gap-4 px-6 py-4"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-serif text-base text-ink">{item.title}</p>
-                    <p className="text-xs text-ink-muted">
-                      {item.author} · × {item.quantity}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm font-medium text-ink">
-                    {formatPrice(item.price * item.quantity)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <div className="border-t border-ink/10 px-6 py-5">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-ink-muted">Subtotal</span>
-                <span className="font-serif text-lg text-ink">{formatPrice(order.subtotal)}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between">
-                <span className="text-sm text-ink-muted">
-                  {order.deliveryMethod === 'easybox' ? 'Livrare EasyBox' : 'Livrare curier'}
-                </span>
-                <span className="font-serif text-lg text-ink">{formatPrice(order.shippingCost ?? 0)}</span>
-              </div>
-              <div className="mt-3 flex items-center justify-between border-t border-ink/10 pt-3">
-                <span className="text-sm font-medium text-ink">Total de plată</span>
-                <span className="font-serif text-2xl text-ink">{formatPrice(order.total ?? order.subtotal)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Delivery */}
-          <div className="border border-ink/10 bg-paper-50">
-            <h3 className="border-b border-ink/10 px-6 py-4 font-serif text-xl text-ink">
-              {order.deliveryMethod === 'easybox' ? 'Livrare EasyBox' : 'Livrare către'}
-            </h3>
-            <div className="px-6 py-5 text-sm leading-relaxed text-ink">
-              {order.deliveryMethod === 'easybox' && order.easybox ? (
-                <>
-                  <p className="font-medium text-ink">{order.shipping.fullName}</p>
-                  <p className="mt-2 font-medium text-ink">{order.easybox.name}</p>
-                  <p>{order.easybox.address}</p>
-                  <p className="mt-3">{order.shipping.email}</p>
-                  <p>{order.shipping.phone}</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium text-ink">{order.shipping.fullName}</p>
-                  <p>{order.shipping.street} nr. {order.shipping.number}
-                    {order.shipping.block ? `, Bl. ${order.shipping.block}` : ''}
-                    {order.shipping.apartment ? `, Ap. ${order.shipping.apartment}` : ''}
-                  </p>
-                  <p>
-                    {order.shipping.locality}, {order.shipping.county}
-                  </p>
-                  <p className="mt-3">{order.shipping.email}</p>
-                  <p>{order.shipping.phone}</p>
-                </>
-              )}
-            </div>
-            <div className="border-t border-ink/10 px-6 py-4">
-              <p className="text-xs leading-relaxed text-ink-muted">
-                Vei fi contactat/ă în curând pentru confirmarea livrării și
-                detaliile de plată.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-12 text-center">
+        <div className="mt-12 flex flex-wrap justify-center gap-3 text-center">
           <button onClick={() => navigate('/')} className="btn btn-primary px-7 py-3">
-            Continue explorarea
+            Continuă explorarea
+          </button>
+          <button onClick={() => navigate('/urmarire-comanda')} className="btn btn-outline px-7 py-3">
+            Urmărește comanda
           </button>
         </div>
       </AnimatedSection>
