@@ -36,8 +36,8 @@ export function getPublicUrl() {
   return (process.env.PUBLIC_URL || 'http://localhost:5173').replace(/\/+$/, '')
 }
 
-/** Shipping fees (RON) — courier to the door vs. EasyBox pickup point. */
-export const SHIPPING_FEES = { courier: 19, easybox: 12 }
+/** Shipping fees (RON) — courier to the door vs. EasyBox / FANbox pickup. */
+export const SHIPPING_FEES = { courier: 19, easybox: 12, fanbox: 12 }
 
 /** Origins allowed to call the API from a browser (empty = any, dev only). */
 export function allowedOrigins() {

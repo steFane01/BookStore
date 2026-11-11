@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { OrderDraft } from '../types'
 import { orderService } from '../services/orderService'
 import { useAuth } from '../context/AuthContext'
+import { useSettings } from '../context/SettingsContext'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
@@ -15,6 +16,7 @@ export default function OrderSuccess() {
   const location = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
+  const { settings } = useSettings()
 
   const initial = (location.state as { order?: OrderDraft } | null)?.order ?? null
   const [order, setOrder] = useState<OrderDraft | null>(initial)
@@ -51,6 +53,10 @@ export default function OrderSuccess() {
   const lookup = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!reference) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Introdu o adresă de email validă.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -84,7 +90,7 @@ export default function OrderSuccess() {
             }
             align="center"
           />
-          <form onSubmit={lookup} className="mt-8 flex flex-col gap-4">
+          <form onSubmit={lookup} noValidate className="mt-8 flex flex-col gap-4">
             <FormField label="Email" htmlFor="os-email" required>
               <input
                 id="os-email"
@@ -126,8 +132,13 @@ export default function OrderSuccess() {
             align="center"
           />
           <p className="mx-auto mt-6 max-w-lg text-ink-muted">
-            Nu se plătește nimic online. Detaliile au fost trimise echipei noastre, iar tu
-            vei fi contactat(ă) pentru confirmarea livrării.
+            {order.deliveryMethod === 'courier'
+              ? 'Nu se plătește nimic online. Detaliile au fost trimise echipei noastre, iar tu vei fi contactat(ă) pentru confirmarea livrării.'
+              : `Coletul merge la ${
+                  order.deliveryMethod === 'fanbox' ? 'lockerul FANbox' : 'EasyBox-ul'
+                } ales. Plata se face cu cardul la locker, la ridicare${
+                  order.deliveryMethod === 'easybox' ? ' (poți alege și ramburs la locker)' : ''
+                }. ${settings.checkoutSummaryNote}`}
           </p>
         </div>
 
@@ -162,7 +173,9 @@ export default function OrderSuccess() {
                 <p className="text-sm text-ink-muted">
                   {order.deliveryMethod === 'easybox'
                     ? 'Expediem către EasyBox-ul ales, prin curier.'
-                    : 'Expediem prin curier la adresa indicată.'}
+                    : order.deliveryMethod === 'fanbox'
+                      ? 'Expediem către lockerul FANbox ales, prin curier.'
+                      : 'Expediem prin curier la adresa indicată.'}
                 </p>
               </div>
             </li>

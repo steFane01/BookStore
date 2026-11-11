@@ -4,7 +4,10 @@ import { formatPrice } from '../utils/format'
 
 /** Shared order summary: products, totals, delivery details and status. */
 export function OrderDetails({ order, showStatus = true }: { order: OrderDraft; showStatus?: boolean }) {
-  const isEasybox = order.deliveryMethod === 'easybox'
+  const isPickup = order.deliveryMethod === 'easybox' || order.deliveryMethod === 'fanbox'
+  const pickup = order.pickupPoint ?? order.easybox
+  const pickupLabel = order.deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'
+  const deliveryLabel = isPickup ? `Livrare ${pickupLabel}` : 'Livrare curier'
 
   return (
     <div className="grid gap-6 md:grid-cols-[1.4fr_1fr]">
@@ -54,7 +57,7 @@ export function OrderDetails({ order, showStatus = true }: { order: OrderDraft; 
           </div>
           <div className="mt-1 flex items-center justify-between">
             <span className="text-sm text-ink-muted">
-              {isEasybox ? 'Livrare EasyBox' : 'Livrare curier'}
+              {deliveryLabel}
             </span>
             <span className="font-serif text-lg text-ink">{formatPrice(order.shippingCost ?? 0)}</span>
           </div>
@@ -68,14 +71,14 @@ export function OrderDetails({ order, showStatus = true }: { order: OrderDraft; 
       {/* Delivery */}
       <div className="border border-ink/10 bg-paper-50">
         <h3 className="border-b border-ink/10 px-6 py-4 font-serif text-xl text-ink">
-          {isEasybox ? 'Livrare EasyBox' : 'Livrare către'}
+          {isPickup ? `Livrare ${pickupLabel}` : 'Livrare către'}
         </h3>
         <div className="px-6 py-5 text-sm leading-relaxed text-ink">
           <p className="font-medium">{order.shipping.fullName}</p>
-          {isEasybox && order.easybox ? (
+          {isPickup && pickup ? (
             <>
-              <p className="mt-2 font-medium">{order.easybox.name}</p>
-              <p>{order.easybox.address}</p>
+              <p className="mt-2 font-medium">{pickup.name}</p>
+              <p>{pickup.address}</p>
             </>
           ) : (
             <>

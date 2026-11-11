@@ -101,9 +101,11 @@ export function AdminOrders({
                     {order.shipping.phone}
                   </p>
                   <p className="mt-1 text-xs text-ink-muted">
-                    {order.deliveryMethod === 'easybox'
-                      ? `EasyBox — ${order.easybox?.name ?? '—'}`
-                      : `Curier — ${order.shipping.locality}, ${order.shipping.county}`}
+                    {order.deliveryMethod === 'courier'
+                      ? `Curier — ${order.shipping.locality}, ${order.shipping.county}`
+                      : `${order.deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'} — ${
+                          (order.pickupPoint ?? order.easybox)?.name ?? '—'
+                        }`}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">

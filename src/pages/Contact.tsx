@@ -15,11 +15,19 @@ export default function Contact() {
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; message?: string }>({})
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   usePageMeta(`Contact — ${settings.brandName}`, 'Scrie-ne: întrebări despre produse, comenzi sau colaborări.')
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const next: typeof fieldErrors = {}
+    if (name.trim().length < 2) next.name = 'Scrie numele tău.'
+    if (!emailRe.test(email.trim())) next.email = 'Adresa de email nu este validă.'
+    if (message.trim().length < 10) next.message = 'Scrie un mesaj de cel puțin 10 caractere.'
+    setFieldErrors(next)
+    if (Object.keys(next).length > 0) return
     setBusy(true)
     setError(null)
     try {
@@ -39,9 +47,9 @@ export default function Contact() {
     <div className="pt-20 md:pt-24">
       <AnimatedSection className="container-page py-16 md:py-24">
         <SectionHeading
-          eyebrow="Contact"
-          title="Hai să vorbim"
-          description="O întrebare despre un produs, o comandă sau o propunere de colaborare — îți răspundem cu plăcere."
+          eyebrow={settings.contactEyebrow}
+          title={settings.contactTitle}
+          description={settings.contactDescription}
           align="center"
         />
 
@@ -68,15 +76,15 @@ export default function Contact() {
           </div>
 
           {/* Form */}
-          <form onSubmit={submit} className="order-1 flex flex-col gap-4 lg:order-2">
-            <FormField label="Nume" htmlFor="ct-name" required>
-              <input id="ct-name" className="field" value={name} onChange={(e) => setName(e.target.value)} />
+          <form onSubmit={submit} noValidate className="order-1 flex flex-col gap-4 lg:order-2">
+            <FormField label="Nume" htmlFor="ct-name" required error={fieldErrors.name}>
+              <input id="ct-name" className={`field ${fieldErrors.name ? 'field-error' : ''}`} value={name} onChange={(e) => { setName(e.target.value); setFieldErrors((f) => ({ ...f, name: undefined })) }} />
             </FormField>
-            <FormField label="Email" htmlFor="ct-email" required>
-              <input id="ct-email" type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <FormField label="Email" htmlFor="ct-email" required error={fieldErrors.email}>
+              <input id="ct-email" type="email" className={`field ${fieldErrors.email ? 'field-error' : ''}`} value={email} onChange={(e) => { setEmail(e.target.value); setFieldErrors((f) => ({ ...f, email: undefined })) }} />
             </FormField>
-            <FormField label="Mesaj" htmlFor="ct-message" required>
-              <textarea id="ct-message" rows={5} className="field resize-none" value={message} onChange={(e) => setMessage(e.target.value)} />
+            <FormField label="Mesaj" htmlFor="ct-message" required error={fieldErrors.message}>
+              <textarea id="ct-message" rows={5} className={`field resize-none ${fieldErrors.message ? 'field-error' : ''}`} value={message} onChange={(e) => { setMessage(e.target.value); setFieldErrors((f) => ({ ...f, message: undefined })) }} />
             </FormField>
 
             {submitted && (

@@ -21,9 +21,9 @@ export default function About() {
       {/* Intro */}
       <AnimatedSection className="container-page py-16 md:py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <p className="eyebrow">Despre noi</p>
+          <p className="eyebrow">{settings.aboutEyebrow}</p>
           <h1 className="serif-display mt-4 text-4xl text-balance text-ink sm:text-5xl md:text-6xl">
-            O librărie pentru cei care citesc încet
+            {settings.aboutTitle}
           </h1>
           <p className="mt-8 font-serif text-xl leading-relaxed text-ink-light">
             {settings.tagline}
@@ -34,7 +34,7 @@ export default function About() {
       {/* Story */}
       <AnimatedSection className="border-y border-ink/10 bg-paper-200/50 py-20">
         <div className="container-page grid gap-10 md:grid-cols-2">
-          <SectionHeading eyebrow="Povestea noastră" title="Am deschis o librărie mică, cu gust mare" />
+          <SectionHeading eyebrow={settings.aboutStoryEyebrow} title={settings.aboutStoryTitle} />
           <div className="flex flex-col gap-5 leading-relaxed text-ink-light">
             {story.map((paragraph, index) => (
               <p key={index}>{paragraph}</p>
@@ -45,42 +45,31 @@ export default function About() {
 
       {/* Values */}
       <AnimatedSection className="container-page py-20">
-        <SectionHeading eyebrow="Ce ne ghidează" title="Principiile noastre" align="center" />
+        <SectionHeading eyebrow={settings.aboutValuesEyebrow} title={settings.aboutValuesTitle} align="center" />
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          <ValueCard
-            title="Răbdarea"
-            text="Nu publicăm grăbit. Fiecare carte trece prin mâini atente, de la text până la grosimea hârtiei."
-          />
-          <ValueCard
-            title="Gustul"
-            text="Preferăm puține titluri, bune, în locul unei vitrine pline de lucruri gălăgioase."
-          />
-          <ValueCard
-            title="Comunitatea"
-            text="Credem în cititorii noștri: în recomandări făcute om către om, în lecturi care rămân."
-          />
+          <ValueCard title={settings.aboutValue1Title} text={settings.aboutValue1Text} />
+          <ValueCard title={settings.aboutValue2Title} text={settings.aboutValue2Text} />
+          <ValueCard title={settings.aboutValue3Title} text={settings.aboutValue3Text} />
         </div>
       </AnimatedSection>
 
       {/* What we do */}
       <AnimatedSection className="border-t border-ink/10 bg-paper-200/50 py-20">
         <div className="container-page">
-          <SectionHeading eyebrow="Ce facem" title="Librărie & editura" />
+          <SectionHeading eyebrow={settings.aboutWhatEyebrow} title={settings.aboutWhatTitle} />
           <div className="mt-10 grid gap-10 md:grid-cols-2">
             <div className="border border-ink/10 bg-paper-50 p-8">
               <IconFeather className="mb-4 h-8 w-8 text-brass-dark" />
-              <h3 className="font-serif text-2xl text-ink">Librărie</h3>
+              <h3 className="font-serif text-2xl text-ink">{settings.aboutShopTitle}</h3>
               <p className="mt-3 leading-relaxed text-ink-muted">
-                Un stoc atent selectat de ficțiune, eseuri și cărți care merită spațiu în
-                biblioteca ta. Căutăm titluri care ies din val și le punem în față.
+                {settings.aboutShopText}
               </p>
             </div>
             <div className="border border-ink/10 bg-paper-50 p-8">
               <IconFeather className="mb-4 h-8 w-8 text-brass-dark" />
-              <h3 className="font-serif text-2xl text-ink">Editura</h3>
+              <h3 className="font-serif text-2xl text-ink">{settings.aboutPublishingTitle}</h3>
               <p className="mt-3 leading-relaxed text-ink-muted">
-                Publicăm puține cărți, dar cu grijă: traduceri atente, design editorial
-                atent și o prezență de hârtie care să stea bine pe raftul tău.
+                {settings.aboutPublishingText}
               </p>
             </div>
           </div>
@@ -90,10 +79,10 @@ export default function About() {
       {/* CTA */}
       <AnimatedSection className="container-page py-20 text-center">
         <p className="font-serif text-2xl italic text-ink-light">
-          Ai o întrebare despre o carte sau o comandă?
+          {settings.aboutCtaText}
         </p>
         <Link to="/contact" className="btn btn-primary mt-6 inline-flex items-center gap-2 px-7 py-3">
-          Contactează-ne
+          {settings.aboutCtaLabel}
           <IconArrowRight className="h-4 w-4" />
         </Link>
       </AnimatedSection>

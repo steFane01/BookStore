@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { CartItem, CustomerAddress, DeliveryMethod, EasyBox, OrderDraft } from '../types'
+import type { CartItem, CustomerAddress, DeliveryMethod, OrderDraft } from '../types'
 import { FormField } from './FormField'
+import { PickupNotice } from './PickupNotice'
 import { orderService } from '../services/orderService'
 import { addressService } from '../services/addressService'
-import { easyboxService } from '../services/easyboxService'
-import { EasyBoxMap } from './EasyBoxMap'
+import { useSettings } from '../context/SettingsContext'
+import { shippingFeeFor } from '../utils/shipping'
 
 export interface CheckoutValues {
   fullName: string
@@ -19,6 +20,10 @@ export interface CheckoutValues {
   floor: string
   apartment: string
   postalCode: string
+  /** Locker name, exactly as the customer sees it (EasyBox or FANbox). */
+  pickupName: string
+  /** Exact locker address (EasyBox or FANbox). */
+  pickupAddress: string
   notes: string
   acceptTerms: boolean
   acceptPrivacy: boolean
@@ -47,6 +52,8 @@ const empty: CheckoutValues = {
   floor: '',
   apartment: '',
   postalCode: '',
+  pickupName: '',
+  pickupAddress: '',
   notes: '',
   acceptTerms: false,
   acceptPrivacy: false,
@@ -67,35 +74,13 @@ export function CheckoutForm({
   const [submitting, setSubmitting] = useState(false)
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([])
   const [selectedAddress, setSelectedAddress] = useState('')
-  const [easyboxId, setEasyboxId] = useState('')
-  const [easyboxes, setEasyboxes] = useState<EasyBox[]>([])
-  const [easyboxesLoading, setEasyboxesLoading] = useState(true)
-  const easybox = easyboxes.find((e) => e.id === easyboxId) ?? null
-  const shippingFee = orderService.shippingFeeFor(deliveryMethod)
+  const [noticeMethod, setNoticeMethod] = useState<'easybox' | 'fanbox' | null>(null)
+  const { settings } = useSettings()
+  const shippingFee = shippingFeeFor(settings, deliveryMethod)
   // A digital-only order (products with productType === 'digital') does not need
   // a shipping address or a delivery method — the file is delivered instantly.
   const hasPhysical = items.some((i) => i.productType !== 'digital')
   const isDigitalOnly = !hasPhysical
-
-  // Load the SameDay EasyBox pickup points from the backend proxy (which talks
-  // to the live SameDay API when configured, or serves the bundled demo list).
-  useEffect(() => {
-    let active = true
-    easyboxService
-      .getLockers()
-      .then(({ boxes }) => {
-        if (active) setEasyboxes(boxes)
-      })
-      .catch(() => {
-        if (active) setEasyboxes([])
-      })
-      .finally(() => {
-        if (active) setEasyboxesLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
 
   // Load the logged-in user's saved addresses so they can be offered as a quick
   // fill for the shipping form.
@@ -139,15 +124,25 @@ export function CheckoutForm({
     }))
   }
 
+  /** Select a delivery method; locker options show the styled info dialog. */
+  const chooseDelivery = (method: DeliveryMethod) => {
+    onDeliveryMethodChange(method)
+    if (method === 'easybox' || method === 'fanbox') setNoticeMethod(method)
+  }
+
   const validate = (): boolean => {
     const e: Partial<Record<keyof CheckoutValues, string>> = {}
     if (values.fullName.trim().length < 3) e.fullName = 'Te rugăm să introduci numele complet.'
     if (!emailRe.test(values.email.trim())) e.email = 'Adresa de email nu este validă.'
     if (values.phone.trim().length < 8) e.phone = 'Introdu un număr de telefon valid.'
     if (hasPhysical) {
-      if (deliveryMethod === 'easybox') {
-        if (!easybox) {
-          e.county = 'Alege un EasyBox SameDay pentru livrare.'
+      if (deliveryMethod === 'easybox' || deliveryMethod === 'fanbox') {
+        const label = deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'
+        if (!values.pickupName.trim()) {
+          e.pickupName = `Scrie numele exact al lockerului ${label}.`
+        }
+        if (!values.pickupAddress.trim()) {
+          e.pickupAddress = `Scrie adresa exactă a lockerului ${label}.`
         }
       } else {
         if (!values.county.trim()) e.county = 'Județul este obligatoriu.'
@@ -187,7 +182,8 @@ export function CheckoutForm({
         userId,
         {
           deliveryMethod,
-          easyboxId: deliveryMethod === 'easybox' ? easyboxId : undefined,
+          pickupName: deliveryMethod === 'courier' ? undefined : values.pickupName.trim(),
+          pickupAddress: deliveryMethod === 'courier' ? undefined : values.pickupAddress.trim(),
           shippingCost: isDigitalOnly ? 0 : shippingFee,
         },
       )
@@ -272,74 +268,77 @@ export function CheckoutForm({
         </div>
       ) : (
       <Section title="Metoda de livrare">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => onDeliveryMethodChange('courier')}
-            aria-pressed={deliveryMethod === 'courier'}
-            className={`flex flex-col gap-1 border p-4 text-left transition-colors ${
-              deliveryMethod === 'courier' ? 'border-[#642A2E] bg-[#642A2E]/5' : 'border-ink/15 hover:border-ink/40'
-            }`}
-          >
-            <span className="font-semibold text-ink">Curier (acasă)</span>
-            <span className="text-sm text-ink-muted">Livrare SameDay la adresa ta: {orderService.shippingFeeFor('courier')} lei</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onDeliveryMethodChange('easybox')}
-            aria-pressed={deliveryMethod === 'easybox'}
-            className={`flex flex-col gap-1 border p-4 text-left transition-colors ${
-              deliveryMethod === 'easybox' ? 'border-[#642A2E] bg-[#642A2E]/5' : 'border-ink/15 hover:border-ink/40'
-            }`}
-          >
-            <span className="font-semibold text-ink">EasyBox (punct de preluare)</span>
-            <span className="text-sm text-ink-muted">Ridicare SameDay dintr-un EasyBox: {orderService.shippingFeeFor('easybox')} lei</span>
-          </button>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <DeliveryOption
+            selected={deliveryMethod === 'courier'}
+            title="Curier (acasă)"
+            description={`Livrare SameDay la adresa ta: ${shippingFeeFor(settings, 'courier')} lei`}
+            onClick={() => chooseDelivery('courier')}
+          />
+          <DeliveryOption
+            selected={deliveryMethod === 'easybox'}
+            title="EasyBox"
+            description={`Ridicare SameDay dintr-un EasyBox: ${shippingFeeFor(settings, 'easybox')} lei`}
+            onClick={() => chooseDelivery('easybox')}
+          />
+          <DeliveryOption
+            selected={deliveryMethod === 'fanbox'}
+            title="FANbox"
+            description={`Ridicare dintr-un locker FANbox: ${shippingFeeFor(settings, 'fanbox')} lei`}
+            onClick={() => chooseDelivery('fanbox')}
+          />
         </div>
 
-        {deliveryMethod === 'easybox' && (
-          <>
-          <FormField label="Alege punctul EasyBox" htmlFor="easybox" required error={errors.county}>
-            <select
-              id="easybox"
-              className={`field ${errors.county ? 'field-error' : ''}`}
-              value={easyboxId}
-              onChange={(e) => setEasyboxId(e.target.value)}
-            >
-              <option value="">— alege un EasyBox —</option>
-              {easyboxesLoading ? (
-                <option disabled>Se încarcă punctele EasyBox…</option>
-              ) : (
-                easyboxes.map((eb) => (
-                  <option key={eb.id} value={eb.id}>
-                    {eb.name} — {eb.address}
-                  </option>
-                ))
-              )}
-            </select>
-            {easyboxesLoading ? (
-              <p className="mt-1 text-xs text-ink-muted">Se încarcă punctele de preluare…</p>
-            ) : easybox ? (
-              <p className="mt-1 text-xs text-ink-muted">
-                Livrare la: <span className="font-medium text-ink">{easybox.name}</span> — {easybox.address}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-ink-muted">
-                Selectează punctul de preluare SameDay preferat.
-              </p>
-            )}
-          </FormField>
+        {deliveryMethod !== 'courier' && (
+          <button
+            type="button"
+            onClick={() => setNoticeMethod(deliveryMethod)}
+            className="mt-3 inline-flex items-center gap-2 text-sm text-oxblood underline-offset-4 hover:underline"
+          >
+            Cum funcționează livrarea la {deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'}?
+          </button>
+        )}
 
-          {/* Harta punctelor EasyBox pe teritoriul României. */}
-          {!easyboxesLoading && (
-            <EasyBoxMap
-              boxes={easyboxes}
-              selectedId={easyboxId}
-              onSelect={setEasyboxId}
-              loading={easyboxesLoading}
-            />
-          )}
-          </>
+        {(deliveryMethod === 'easybox' || deliveryMethod === 'fanbox') && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label={`Numele lockerului ${deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'}`}
+              htmlFor="pickupName"
+              required
+              error={errors.pickupName}
+            >
+              <input
+                id="pickupName"
+                className={`field ${errors.pickupName ? 'field-error' : ''}`}
+                value={values.pickupName}
+                onChange={(e) => set('pickupName', e.target.value)}
+                placeholder={
+                  deliveryMethod === 'fanbox'
+                    ? 'ex: FANbox Kaufland Militari'
+                    : 'ex: EasyBox Sector 1 — Victoriei'
+                }
+              />
+            </FormField>
+            <FormField
+              label="Adresa exactă a lockerului"
+              htmlFor="pickupAddress"
+              required
+              error={errors.pickupAddress}
+            >
+              <input
+                id="pickupAddress"
+                className={`field ${errors.pickupAddress ? 'field-error' : ''}`}
+                value={values.pickupAddress}
+                onChange={(e) => set('pickupAddress', e.target.value)}
+                placeholder="ex: Calea Victoriei 120, București"
+              />
+            </FormField>
+            <p className="text-xs leading-relaxed text-ink-muted sm:col-span-2">
+              Scrie exact numele și adresa lockerului{' '}
+              {deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'}: coletul va fi trimis acolo, iar
+              plata se face cu cardul la ridicare.
+            </p>
+          </div>
         )}
         </Section>
       )}
@@ -438,9 +437,8 @@ export function CheckoutForm({
       {/* Payment notice */}
       <div className="border border-brass/40 bg-brass/5 px-6 py-5">
         <p className="text-sm leading-relaxed text-ink">
-          <span className="font-semibold">Plata nu se efectuează online.</span>
-          După trimiterea comenzii, datele vor fi procesate pentru organizarea
-          livrării, iar detaliile de plată vor fi comunicate separat.
+          <span className="font-semibold">Plata nu se efectuează online.</span>{' '}
+          <span className="whitespace-pre-line">{settings.checkoutPaymentNotice}</span>
         </p>
       </div>
 
@@ -471,7 +469,39 @@ export function CheckoutForm({
       >
         {submitting ? 'Se trimite comanda…' : 'Trimite comanda'}
       </button>
+
+      <PickupNotice
+        open={noticeMethod !== null}
+        method={noticeMethod ?? 'easybox'}
+        onClose={() => setNoticeMethod(null)}
+      />
     </form>
+  )
+}
+
+function DeliveryOption({
+  selected,
+  title,
+  description,
+  onClick,
+}: {
+  selected: boolean
+  title: string
+  description: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`flex flex-col gap-1 border p-4 text-left transition-colors ${
+        selected ? 'border-[#642A2E] bg-[#642A2E]/5' : 'border-ink/15 hover:border-ink/40'
+      }`}
+    >
+      <span className="font-semibold text-ink">{title}</span>
+      <span className="text-sm text-ink-muted">{description}</span>
+    </button>
   )
 }
 

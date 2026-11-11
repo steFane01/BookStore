@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { newsletterService, type Subscriber } from '../../services/newsletterService'
+import { useDialog } from '../../context/DialogContext'
 
 /** Newsletter subscriber list with CSV export and removal. */
 export function AdminNewsletter() {
@@ -7,6 +8,7 @@ export function AdminNewsletter() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const { confirm } = useDialog()
 
   const load = useCallback(async () => {
     setError(null)
@@ -24,7 +26,13 @@ export function AdminNewsletter() {
   }, [load])
 
   const remove = async (email: string) => {
-    if (!window.confirm(`Ștergi abonatul ${email}?`)) return
+    const ok = await confirm({
+      title: 'Ștergi abonatul?',
+      message: `${email} va fi eliminat din lista de newsletter.`,
+      confirmLabel: 'Șterge abonatul',
+      tone: 'danger',
+    })
+    if (!ok) return
     setBusy(email)
     setError(null)
     try {

@@ -59,7 +59,7 @@ export const EASYBOXES: EasyBox[] = [
  * the checkout summary, order service and backend all agree. The backend also
  * clamps the fee it accepts so a client can't invent a discount.
  */
-export const SHIPPING_FEES: Record<DeliveryMethod, number> = { courier: 19, easybox: 12 }
+export const SHIPPING_FEES: Record<DeliveryMethod, number> = { courier: 19, easybox: 12, fanbox: 12 }
 
 export function findEasybox(id: string): EasyBox | undefined {
   return EASYBOXES.find((e) => e.id === id)

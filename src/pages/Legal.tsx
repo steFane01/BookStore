@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useSettings } from '../context/SettingsContext'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { AnimatedSection } from '../components/AnimatedSection'
-import { SHIPPING_FEES } from '../data/easyboxes'
+import { shippingFeeFor } from '../utils/shipping'
 
 export type LegalKind = 'terms' | 'privacy' | 'cookies'
 
@@ -78,9 +78,11 @@ export default function Legal({ kind }: { kind: LegalKind }) {
               <Section title="4. Livrare">
                 <p>
                   {settings.deliveryInfo} Taxa de livrare este de{' '}
-                  {SHIPPING_FEES.courier.toFixed(2)} RON pentru curier la adresă și{' '}
-                  {SHIPPING_FEES.easybox.toFixed(2)} RON pentru ridicare din EasyBox.
-                  Produsele digitale nu au cost de livrare.
+                  {shippingFeeFor(settings, 'courier').toFixed(2)} RON pentru curier la adresă,{' '}
+                  {shippingFeeFor(settings, 'easybox').toFixed(2)} RON pentru ridicare din EasyBox și{' '}
+                  {shippingFeeFor(settings, 'fanbox').toFixed(2)} RON pentru ridicare din FANbox.
+                  Produsele digitale nu au cost de livrare. Pentru livrarea la locker, plata se face
+                  cu cardul la ridicarea coletului (la EasyBox este disponibilă și plata ramburs).
                 </p>
               </Section>
 

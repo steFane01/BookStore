@@ -3,6 +3,7 @@ import { Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { SettingsProvider } from './context/SettingsContext'
 import { CartProvider } from './context/CartContext'
+import { DialogProvider } from './context/DialogContext'
 import { Header } from './components/Header'
 import { Footer } from './components/Footer'
 
@@ -36,30 +37,32 @@ export default function App() {
     <SettingsProvider>
       <AuthProvider>
         <CartProvider>
-        <ScrollToTop />
-        <div className="flex min-h-screen flex-col">
-          <Header />
-          <main className="flex-1">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/carte/:id" element={<BookDetail />} />
-              <Route path="/comanda" element={<Checkout />} />
-              <Route path="/comanda/:id" element={<OrderSuccess />} />
-              <Route path="/autentificare" element={<Auth />} />
-              <Route path="/resetare-parola/:token" element={<ResetPassword />} />
-              <Route path="/cont" element={<Account />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/despre" element={<About />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/termeni" element={<Legal kind="terms" />} />
-              <Route path="/confidentialitate" element={<Legal kind="privacy" />} />
-              <Route path="/cookies" element={<Legal kind="cookies" />} />
-              <Route path="/urmarire-comanda" element={<OrderTracking />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </main>
-          <Footer />
-        </div>
+          <DialogProvider>
+            <ScrollToTop />
+            <div className="flex min-h-screen flex-col">
+              <Header />
+              <main className="flex-1">
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/carte/:id" element={<BookDetail />} />
+                  <Route path="/comanda" element={<Checkout />} />
+                  <Route path="/comanda/:id" element={<OrderSuccess />} />
+                  <Route path="/autentificare" element={<Auth />} />
+                  <Route path="/resetare-parola/:token" element={<ResetPassword />} />
+                  <Route path="/cont" element={<Account />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/despre" element={<About />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/termeni" element={<Legal kind="terms" />} />
+                  <Route path="/confidentialitate" element={<Legal kind="privacy" />} />
+                  <Route path="/cookies" element={<Legal kind="cookies" />} />
+                  <Route path="/urmarire-comanda" element={<OrderTracking />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </main>
+              <Footer />
+            </div>
+          </DialogProvider>
         </CartProvider>
       </AuthProvider>
     </SettingsProvider>

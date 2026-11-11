@@ -140,8 +140,16 @@ export interface OrderLine {
 
 export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'
 
-/** How an order is delivered (SameDay courier home, or EasyBox pickup point). */
-export type DeliveryMethod = 'courier' | 'easybox'
+/** How an order is delivered (courier at home, or a locker pickup point). */
+export type DeliveryMethod = 'courier' | 'easybox' | 'fanbox'
+
+/** A locker chosen for pickup delivery (EasyBox or FANbox). */
+export interface PickupPoint {
+  /** Locker name, exactly as the customer sees it. */
+  name: string
+  /** Exact locker address. */
+  address: string
+}
 
 export interface EasyBox {
   id: string
@@ -166,8 +174,10 @@ export interface OrderDraft {
   /** Grand total = subtotal + shippingCost. */
   total: number
   deliveryMethod: DeliveryMethod
-  /** The chosen SameDay EasyBox (present only when deliveryMethod === 'easybox'). */
-  easybox?: { name: string; address: string }
+  /** The chosen locker (present for EasyBox / FANbox deliveries). */
+  pickupPoint?: PickupPoint
+  /** @deprecated Kept for older orders — use `pickupPoint`. */
+  easybox?: PickupPoint
   /** No online payment — this stays null by design in this frontend-only build. */
   payment: null
   status: OrderStatus

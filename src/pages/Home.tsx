@@ -131,14 +131,18 @@ export default function Home() {
 
       <HomeBanner categories={categories} />
 
-      <CoversStrip books={books} />
+      <CoversStrip
+        books={books}
+        eyebrow={settings.homeCoversEyebrow}
+        title={settings.homeCoversTitle}
+      />
 
       {/* Philosophy statement */}
       <AnimatedSection className="container-page py-20 md:py-28">
         <div className="mx-auto max-w-3xl text-center">
           <SectionHeading
-            eyebrow="Despre noi"
-            title="O librărie pentru cei care citesc încet"
+            eyebrow={settings.homePhilosophyEyebrow}
+            title={settings.homePhilosophyTitle}
             align="center"
           />
           <p className="mt-8 font-serif text-xl leading-relaxed text-ink-light">
@@ -151,12 +155,10 @@ export default function Home() {
       <AnimatedSection className="container-page pb-20 md:pb-28">
         <div className="flex items-end justify-between gap-6">
           <SectionHeading
-            eyebrow="Catalog"
-            title={activeCategory ? activeCategory.name : 'Titluri din librărie'}
+            eyebrow={settings.homeCatalogEyebrow}
+            title={activeCategory ? activeCategory.name : settings.homeCatalogTitle}
             description={
-              activeCategory
-                ? activeCategory.blurb
-                : 'Lucrăm la noi apariții. Până atunci, acestea sunt produsele pe care le poți avea acasă.'
+              activeCategory ? activeCategory.blurb : settings.homeCatalogDescription
             }
           />
           <IconFeather className="hidden h-10 w-10 text-brass/40 md:block" aria-hidden="true" />

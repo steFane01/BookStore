@@ -19,6 +19,10 @@ export default function OrderTracking() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
+    if (!reference.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Completează numărul comenzii și o adresă de email validă.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -41,7 +45,7 @@ export default function OrderTracking() {
           align="center"
         />
 
-        <form onSubmit={submit} className="mx-auto mt-10 flex max-w-lg flex-col gap-4">
+        <form onSubmit={submit} noValidate className="mx-auto mt-10 flex max-w-lg flex-col gap-4">
           <FormField label="Număr comandă" htmlFor="tr-reference" required>
             <input
               id="tr-reference"

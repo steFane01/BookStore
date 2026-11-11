@@ -124,7 +124,7 @@ export function Footer() {
             © {year} {settings.brandName}. Toate drepturile rezervate.
           </p>
           <p className="flex items-center gap-1.5">
-            Realizat cu răbdare, ca o carte bună.
+            {settings.footerNote}
             <IconFeather className="h-3.5 w-3.5 text-brass-dark" />
           </p>
         </div>

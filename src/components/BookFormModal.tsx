@@ -174,7 +174,7 @@ export function BookFormModal({ book, categories, onClose, onSaved }: BookFormMo
           </button>
         </div>
 
-        <form onSubmit={submit} className="grid gap-4 p-6 sm:grid-cols-2">
+        <form onSubmit={submit} noValidate className="grid gap-4 p-6 sm:grid-cols-2">
           <FormField label="Titlu" htmlFor="bk-title" required>
             <input id="bk-title" className="field" value={title} onChange={(e) => setTitle(e.target.value)} />
           </FormField>

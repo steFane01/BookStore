@@ -1,7 +1,8 @@
 import type { CartItem, DeliveryMethod } from '../types'
 import { formatPrice } from '../utils/format'
 import { BookCover } from './BookCover'
-import { SHIPPING_FEES } from '../data/easyboxes'
+import { useSettings } from '../context/SettingsContext'
+import { shippingFeeFor } from '../utils/shipping'
 
 interface OrderSummaryProps {
   items: CartItem[]
@@ -24,15 +25,18 @@ export function OrderSummary({
   shippingCost,
   deliveryMethod = 'courier',
 }: OrderSummaryProps) {
+  const { settings } = useSettings()
   const methodLabel =
     items.every((i) => i.productType === 'digital')
       ? 'Livrare digitală'
       : deliveryMethod === 'easybox'
         ? 'Livrare EasyBox'
-        : 'Livrare curier'
+        : deliveryMethod === 'fanbox'
+          ? 'Livrare FANbox'
+          : 'Livrare curier'
   const fee = items.every((i) => i.productType === 'digital')
     ? 0
-    : shippingCost ?? SHIPPING_FEES[deliveryMethod]
+    : shippingCost ?? shippingFeeFor(settings, deliveryMethod)
   const total = subtotal + fee
 
   return (
@@ -94,9 +98,7 @@ export function OrderSummary({
           <span className="text-sm font-medium text-ink">Total</span>
           <span className="font-serif text-2xl text-ink">{formatPrice(total)}</span>
         </div>
-        <p className="mt-2 text-xs text-ink-muted">
-          Nu se percepe plata online. Livrarea va fi confirmată după prelucrarea comenzii.
-        </p>
+        <p className="mt-2 text-xs text-ink-muted">{settings.checkoutSummaryNote}</p>
       </div>
     </div>
   )

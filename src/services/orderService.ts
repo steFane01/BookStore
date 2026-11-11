@@ -2,11 +2,14 @@ import type { CartItem, DeliveryMethod, OrderDraft, OrderStatus, ShippingAddress
 import { api } from './http'
 import { SHIPPING_FEES } from '../data/easyboxes'
 
-/** Extra order options chosen in checkout (delivery method + SameDay EasyBox). */
+/** Extra order options chosen in checkout (delivery method + pickup point). */
 export interface OrderOptions {
   deliveryMethod: DeliveryMethod
-  easyboxId?: string
-  /** Shipping fee (RON); the backend clamps it to the known rate. */
+  /** Locker name typed by the customer (EasyBox or FANbox). */
+  pickupName?: string
+  /** Exact locker address typed by the customer (EasyBox or FANbox). */
+  pickupAddress?: string
+  /** Shipping fee (RON); the backend re-computes it from the owner settings. */
   shippingCost: number
 }
 
@@ -56,7 +59,8 @@ export const orderService = {
         ),
         shipping,
         deliveryMethod: options.deliveryMethod,
-        easyboxId: options.easyboxId,
+        pickupName: options.pickupName,
+        pickupAddress: options.pickupAddress,
         shippingCost: options.shippingCost,
       },
     })

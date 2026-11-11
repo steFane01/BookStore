@@ -147,6 +147,64 @@ export function AdminSettings() {
         </FormField>
       </Group>
 
+      {/* Home page copy */}
+      <Group title="Pagina principală">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă deasupra colecțiilor" htmlFor="set-home-hero-eyebrow">
+            <input id="set-home-hero-eyebrow" className="field" value={form.homeHeroEyebrow} onChange={(e) => set('homeHeroEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Text buton colecții" htmlFor="set-home-hero-cta">
+            <input id="set-home-hero-cta" className="field" value={form.homeHeroCta} onChange={(e) => set('homeHeroCta', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă secțiune „Despre noi”" htmlFor="set-home-philosophy-eyebrow">
+            <input id="set-home-philosophy-eyebrow" className="field" value={form.homePhilosophyEyebrow} onChange={(e) => set('homePhilosophyEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu secțiune „Despre noi”" htmlFor="set-home-philosophy-title">
+            <input id="set-home-philosophy-title" className="field" value={form.homePhilosophyTitle} onChange={(e) => set('homePhilosophyTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă banda de coperți" htmlFor="set-home-covers-eyebrow">
+            <input id="set-home-covers-eyebrow" className="field" value={form.homeCoversEyebrow} onChange={(e) => set('homeCoversEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu banda de coperți" htmlFor="set-home-covers-title">
+            <input id="set-home-covers-title" className="field" value={form.homeCoversTitle} onChange={(e) => set('homeCoversTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă catalog" htmlFor="set-home-catalog-eyebrow">
+            <input id="set-home-catalog-eyebrow" className="field" value={form.homeCatalogEyebrow} onChange={(e) => set('homeCatalogEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu catalog" htmlFor="set-home-catalog-title">
+            <input id="set-home-catalog-title" className="field" value={form.homeCatalogTitle} onChange={(e) => set('homeCatalogTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <TextArea label="Descriere catalog" id="set-home-catalog-description" value={form.homeCatalogDescription} onChange={(v) => set('homeCatalogDescription', v)} rows={3} />
+      </Group>
+
+      {/* Newsletter */}
+      <Group title="Blocul de newsletter">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă" htmlFor="set-newsletter-eyebrow">
+            <input id="set-newsletter-eyebrow" className="field" value={form.newsletterEyebrow} onChange={(e) => set('newsletterEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu" htmlFor="set-newsletter-title">
+            <input id="set-newsletter-title" className="field" value={form.newsletterTitle} onChange={(e) => set('newsletterTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <TextArea label="Text" id="set-newsletter-text" value={form.newsletter} onChange={(v) => set('newsletter', v)} rows={3} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Text buton abonare" htmlFor="set-newsletter-cta">
+            <input id="set-newsletter-cta" className="field" value={form.newsletterCta} onChange={(e) => set('newsletterCta', e.target.value)} />
+          </FormField>
+          <FormField label="Mesaj după abonare" htmlFor="set-newsletter-success">
+            <input id="set-newsletter-success" className="field" value={form.newsletterSuccess} onChange={(e) => set('newsletterSuccess', e.target.value)} />
+          </FormField>
+        </div>
+      </Group>
+
       {/* Contact */}
       <Group title="Contact și social">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -163,6 +221,184 @@ export function AdminSettings() {
             <input id="set-facebook" className="field" value={form.facebook} onChange={(e) => set('facebook', e.target.value)} placeholder="https://facebook.com/…" />
           </FormField>
         </div>
+      </Group>
+
+      {/* Product page copy */}
+      <Group title="Pagina produs">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă „Despre carte”" htmlFor="set-book-about-eyebrow">
+            <input id="set-book-about-eyebrow" className="field" value={form.bookAboutEyebrow} onChange={(e) => set('bookAboutEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Etichetă „Despre produs” (digital)" htmlFor="set-book-about-eyebrow-digital">
+            <input id="set-book-about-eyebrow-digital" className="field" value={form.bookAboutEyebrowDigital} onChange={(e) => set('bookAboutEyebrowDigital', e.target.value)} />
+          </FormField>
+        </div>
+        <FormField label="Titlu secțiune descriere" htmlFor="set-book-about-title">
+          <input id="set-book-about-title" className="field" value={form.bookAboutTitle} onChange={(e) => set('bookAboutTitle', e.target.value)} />
+        </FormField>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă „Detalii”" htmlFor="set-book-details-eyebrow">
+            <input id="set-book-details-eyebrow" className="field" value={form.bookDetailsEyebrow} onChange={(e) => set('bookDetailsEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu „Detalii”" htmlFor="set-book-details-title">
+            <input id="set-book-details-title" className="field" value={form.bookDetailsTitle} onChange={(e) => set('bookDetailsTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă fragment din carte" htmlFor="set-book-excerpt-eyebrow">
+            <input id="set-book-excerpt-eyebrow" className="field" value={form.bookExcerptEyebrow} onChange={(e) => set('bookExcerptEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu fragment din carte" htmlFor="set-book-excerpt-title">
+            <input id="set-book-excerpt-title" className="field" value={form.bookExcerptTitle} onChange={(e) => set('bookExcerptTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă galerie foto" htmlFor="set-book-gallery-eyebrow">
+            <input id="set-book-gallery-eyebrow" className="field" value={form.bookGalleryEyebrow} onChange={(e) => set('bookGalleryEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu galerie foto" htmlFor="set-book-gallery-title">
+            <input id="set-book-gallery-title" className="field" value={form.bookGalleryTitle} onChange={(e) => set('bookGalleryTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <p className="text-xs leading-relaxed text-ink-muted">
+          Detaliile fiecărui produs (titlu, descriere, preț, livrare) se editează din fila
+          „Produse”. Aici schimbi doar textele generale ale paginii.
+        </p>
+      </Group>
+
+      {/* About page copy */}
+      <Group title="Pagina Despre">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă introducere" htmlFor="set-about-eyebrow">
+            <input id="set-about-eyebrow" className="field" value={form.aboutEyebrow} onChange={(e) => set('aboutEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu introducere" htmlFor="set-about-title">
+            <input id="set-about-title" className="field" value={form.aboutTitle} onChange={(e) => set('aboutTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă poveste" htmlFor="set-about-story-eyebrow">
+            <input id="set-about-story-eyebrow" className="field" value={form.aboutStoryEyebrow} onChange={(e) => set('aboutStoryEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu poveste" htmlFor="set-about-story-title">
+            <input id="set-about-story-title" className="field" value={form.aboutStoryTitle} onChange={(e) => set('aboutStoryTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă principii" htmlFor="set-about-values-eyebrow">
+            <input id="set-about-values-eyebrow" className="field" value={form.aboutValuesEyebrow} onChange={(e) => set('aboutValuesEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu principii" htmlFor="set-about-values-title">
+            <input id="set-about-values-title" className="field" value={form.aboutValuesTitle} onChange={(e) => set('aboutValuesTitle', e.target.value)} />
+          </FormField>
+        </div>
+        {([1, 2, 3] as const).map((index) => (
+          <div key={index} className="grid gap-4 sm:grid-cols-2">
+            <FormField label={`Titlu principiu ${index}`} htmlFor={`set-about-value-${index}-title`}>
+              <input
+                id={`set-about-value-${index}-title`}
+                className="field"
+                value={form[`aboutValue${index}Title`]}
+                onChange={(e) => set(`aboutValue${index}Title`, e.target.value)}
+              />
+            </FormField>
+            <FormField label={`Text principiu ${index}`} htmlFor={`set-about-value-${index}-text`}>
+              <input
+                id={`set-about-value-${index}-text`}
+                className="field"
+                value={form[`aboutValue${index}Text`]}
+                onChange={(e) => set(`aboutValue${index}Text`, e.target.value)}
+              />
+            </FormField>
+          </div>
+        ))}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă „Ce facem”" htmlFor="set-about-what-eyebrow">
+            <input id="set-about-what-eyebrow" className="field" value={form.aboutWhatEyebrow} onChange={(e) => set('aboutWhatEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu „Ce facem”" htmlFor="set-about-what-title">
+            <input id="set-about-what-title" className="field" value={form.aboutWhatTitle} onChange={(e) => set('aboutWhatTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Titlu card librărie" htmlFor="set-about-shop-title">
+            <input id="set-about-shop-title" className="field" value={form.aboutShopTitle} onChange={(e) => set('aboutShopTitle', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu card editură" htmlFor="set-about-publishing-title">
+            <input id="set-about-publishing-title" className="field" value={form.aboutPublishingTitle} onChange={(e) => set('aboutPublishingTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <TextArea label="Text card librărie" id="set-about-shop-text" value={form.aboutShopText} onChange={(v) => set('aboutShopText', v)} rows={3} />
+        <TextArea label="Text card editură" id="set-about-publishing-text" value={form.aboutPublishingText} onChange={(v) => set('aboutPublishingText', v)} rows={3} />
+        <TextArea label="Povestea noastră (paragrafe separate prin linie goală)" id="set-about" value={form.aboutText} onChange={(v) => set('aboutText', v)} rows={5} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Text final (întrebare)" htmlFor="set-about-cta-text">
+            <input id="set-about-cta-text" className="field" value={form.aboutCtaText} onChange={(e) => set('aboutCtaText', e.target.value)} />
+          </FormField>
+          <FormField label="Text buton final" htmlFor="set-about-cta-label">
+            <input id="set-about-cta-label" className="field" value={form.aboutCtaLabel} onChange={(e) => set('aboutCtaLabel', e.target.value)} />
+          </FormField>
+        </div>
+      </Group>
+
+      {/* Contact page copy */}
+      <Group title="Pagina Contact">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă" htmlFor="set-contact-eyebrow">
+            <input id="set-contact-eyebrow" className="field" value={form.contactEyebrow} onChange={(e) => set('contactEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu" htmlFor="set-contact-title">
+            <input id="set-contact-title" className="field" value={form.contactTitle} onChange={(e) => set('contactTitle', e.target.value)} />
+          </FormField>
+        </div>
+        <TextArea label="Descriere" id="set-contact-description" value={form.contactDescription} onChange={(v) => set('contactDescription', v)} rows={3} />
+      </Group>
+
+      {/* Checkout & delivery copy */}
+      <Group title="Checkout, livrare și lockere">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Etichetă checkout" htmlFor="set-checkout-eyebrow">
+            <input id="set-checkout-eyebrow" className="field" value={form.checkoutEyebrow} onChange={(e) => set('checkoutEyebrow', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu checkout (produse fizice)" htmlFor="set-checkout-title-physical">
+            <input id="set-checkout-title-physical" className="field" value={form.checkoutTitlePhysical} onChange={(e) => set('checkoutTitlePhysical', e.target.value)} />
+          </FormField>
+          <FormField label="Titlu checkout (digital)" htmlFor="set-checkout-title-digital">
+            <input id="set-checkout-title-digital" className="field" value={form.checkoutTitleDigital} onChange={(e) => set('checkoutTitleDigital', e.target.value)} />
+          </FormField>
+        </div>
+        <TextArea label="Descriere checkout (produse fizice)" id="set-checkout-description-physical" value={form.checkoutDescriptionPhysical} onChange={(v) => set('checkoutDescriptionPhysical', v)} rows={2} />
+        <TextArea label="Descriere checkout (digital)" id="set-checkout-description-digital" value={form.checkoutDescriptionDigital} onChange={(v) => set('checkoutDescriptionDigital', v)} rows={2} />
+        <TextArea label="Notă plată în formular" id="set-checkout-payment-notice" value={form.checkoutPaymentNotice} onChange={(v) => set('checkoutPaymentNotice', v)} rows={4} />
+        <TextArea label="Notă plată în sumarul comenzii" id="set-checkout-summary-note" value={form.checkoutSummaryNote} onChange={(v) => set('checkoutSummaryNote', v)} rows={2} />
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FormField label="Taxă curier (RON)" htmlFor="set-fee-courier">
+            <input id="set-fee-courier" type="number" min="0" step="0.01" className="field" value={form.shippingFeeCourier} onChange={(e) => set('shippingFeeCourier', e.target.value)} />
+          </FormField>
+          <FormField label="Taxă EasyBox (RON)" htmlFor="set-fee-easybox">
+            <input id="set-fee-easybox" type="number" min="0" step="0.01" className="field" value={form.shippingFeeEasybox} onChange={(e) => set('shippingFeeEasybox', e.target.value)} />
+          </FormField>
+          <FormField label="Taxă FANbox (RON)" htmlFor="set-fee-fanbox">
+            <input id="set-fee-fanbox" type="number" min="0" step="0.01" className="field" value={form.shippingFeeFanbox} onChange={(e) => set('shippingFeeFanbox', e.target.value)} />
+          </FormField>
+        </div>
+
+        <FormField label="Titlu popup EasyBox" htmlFor="set-easybox-notice-title">
+          <input id="set-easybox-notice-title" className="field" value={form.easyboxNoticeTitle} onChange={(e) => set('easyboxNoticeTitle', e.target.value)} />
+        </FormField>
+        <TextArea label="Text popup EasyBox" id="set-easybox-notice-text" value={form.easyboxNoticeText} onChange={(v) => set('easyboxNoticeText', v)} rows={8} />
+        <FormField label="Titlu popup FANbox" htmlFor="set-fanbox-notice-title">
+          <input id="set-fanbox-notice-title" className="field" value={form.fanboxNoticeTitle} onChange={(e) => set('fanboxNoticeTitle', e.target.value)} />
+        </FormField>
+        <TextArea label="Text popup FANbox" id="set-fanbox-notice-text" value={form.fanboxNoticeText} onChange={(v) => set('fanboxNoticeText', v)} rows={8} />
+        <FormField label="Text buton închidere popup" htmlFor="set-pickup-notice-confirm">
+          <input id="set-pickup-notice-confirm" className="field" value={form.pickupNoticeConfirm} onChange={(e) => set('pickupNoticeConfirm', e.target.value)} />
+        </FormField>
+        <p className="text-xs leading-relaxed text-ink-muted">
+          Taxele se aplică imediat în checkout și sunt recalculate pe server la plasarea
+          comenzii. Textele popup-urilor apar când clientul alege EasyBox sau FANbox.
+        </p>
       </Group>
 
       {/* Legal */}
@@ -191,7 +427,9 @@ export function AdminSettings() {
         <TextArea label="Livrare" id="set-delivery" value={form.deliveryInfo} onChange={(v) => set('deliveryInfo', v)} rows={2} />
         <TextArea label="Plată" id="set-payment" value={form.paymentInfo} onChange={(v) => set('paymentInfo', v)} rows={2} />
         <TextArea label="Retur" id="set-returns" value={form.returnsInfo} onChange={(v) => set('returnsInfo', v)} rows={2} />
-        <TextArea label="Povestea noastră (paragrafe separate prin linie goală)" id="set-about" value={form.aboutText} onChange={(v) => set('aboutText', v)} rows={5} />
+        <FormField label="Text subsol" htmlFor="set-footer-note">
+          <input id="set-footer-note" className="field" value={form.footerNote} onChange={(e) => set('footerNote', e.target.value)} />
+        </FormField>
       </Group>
 
       {error && (

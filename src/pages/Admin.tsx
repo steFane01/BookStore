@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Book, OrderDraft, ProductCategory } from '../types'
 import { useAuth } from '../context/AuthContext'
+import { useDialog } from '../context/DialogContext'
 import { bookService } from '../services/bookService'
 import { orderService } from '../services/orderService'
 import { HttpError } from '../services/http'
@@ -259,6 +260,7 @@ function CatalogTab({
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const { confirm } = useDialog()
 
   const categoryName = (book: Book): string => {
     if (book.categoryId) {
@@ -280,7 +282,13 @@ function CatalogTab({
     id === 'all' ? books.length : books.filter((book) => book.categoryId === id).length
 
   const remove = async (book: Book) => {
-    if (!window.confirm(`Ștergi definitiv produsul „${book.title}”?`)) return
+    const ok = await confirm({
+      title: 'Ștergi produsul?',
+      message: `„${book.title}” va fi șters definitiv din catalog.`,
+      confirmLabel: 'Șterge produsul',
+      tone: 'danger',
+    })
+    if (!ok) return
     setBusy(book.id)
     setActionError(null)
     try {

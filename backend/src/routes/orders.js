@@ -3,9 +3,9 @@ import crypto from 'node:crypto'
 import { pool } from '../db.js'
 import { optionalAuth, requireAdmin, requireAuth } from '../auth.js'
 import { sendMail, getContactRecipient } from '../mailer.js'
-import { getPublicUrl, SHIPPING_FEES } from '../config.js'
+import { getPublicUrl } from '../config.js'
 import { findLocker } from '../sameday.js'
-import { getSiteName } from '../settings.js'
+import { getSiteName, getShippingFees } from '../settings.js'
 import { ApiError, serverError } from '../lib/errors.js'
 import { cleanString, escapeHtml, isEmail } from '../lib/text.js'
 import { computeOrderTotals, resolveOrderLines } from '../lib/pricing.js'
@@ -58,6 +58,11 @@ function toOrder(row, lines, { admin = false } = {}) {
     shippingCost: row.shipping_cost != null ? Number(row.shipping_cost) : 0,
     total: row.total != null ? Number(row.total) : Number(row.subtotal),
     deliveryMethod: row.delivery_method || 'courier',
+    // Pickup point (EasyBox or FANbox): name + exact locker address.
+    pickupPoint: row.easybox_name
+      ? { name: row.easybox_name, address: row.easybox_address ?? '' }
+      : undefined,
+    // Kept for backwards compatibility with older clients.
     easybox: row.easybox_name
       ? { name: row.easybox_name, address: row.easybox_address ?? '' }
       : undefined,
@@ -134,13 +139,19 @@ function totalsRowsHtml(subtotal, shippingCost, total) {
   )
 }
 
+/** Human-readable label for a pickup-point delivery method. */
+function pickupLabel(deliveryMethod) {
+  return deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'
+}
+
 /** Email to the owner: everything needed to place the shipment manually. */
-function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtotal, deliveryMethod, easybox, shippingCost, total, adminUrl }) {
-  const isEasybox = deliveryMethod === 'easybox'
+function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtotal, deliveryMethod, pickupPoint, shippingCost, total, adminUrl }) {
+  const isPickup = deliveryMethod === 'easybox' || deliveryMethod === 'fanbox'
   const address = addressLines(shipping)
   const notes = shipping.notes ? `Observații: ${shipping.notes}\n` : ''
-  const deliveryText = isEasybox
-    ? `== Livrare: EasyBox ==\nPunct: ${easybox?.name ?? '—'}\nAdresă EasyBox: ${easybox?.address ?? '—'}\nDestinatar: ${shipping.fullName}\nTelefon: ${shipping.phone}\n${notes}`
+  const deliveryText = isPickup
+    ? `== Livrare: ${pickupLabel(deliveryMethod)} ==\nPunct: ${pickupPoint?.name ?? '—'}\nAdresă locker: ${pickupPoint?.address ?? '—'}\nDestinatar: ${shipping.fullName}\nTelefon: ${shipping.phone}\n` +
+      `Plată: card la locker (ramburs posibil)\n${notes}`
     : `== Livrare: curier la adresă ==\nNume: ${shipping.fullName}\nEmail: ${shipping.email}\nTelefon: ${shipping.phone}\nAdresă: ${address.join(', ')}\n${notes}`
 
   const text =
@@ -161,10 +172,11 @@ function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtota
     `<p>Data: ${escapeHtml(new Date(createdAt).toLocaleString('ro-RO'))}</p>` +
     linesTable(lines) +
     totalsRowsHtml(subtotal, shippingCost, total) +
-    (isEasybox
-      ? `<h3>Livrare — EasyBox</h3><p>Punct: <strong>${escapeHtml(easybox?.name ?? '—')}</strong><br/>` +
-        `Adresă EasyBox: ${escapeHtml(easybox?.address ?? '—')}<br/>` +
-        `Destinatar: ${escapeHtml(shipping.fullName)}<br/>Telefon: ${escapeHtml(shipping.phone)}</p>`
+    (isPickup
+      ? `<h3>Livrare — ${pickupLabel(deliveryMethod)}</h3><p>Punct: <strong>${escapeHtml(pickupPoint?.name ?? '—')}</strong><br/>` +
+        `Adresă locker: ${escapeHtml(pickupPoint?.address ?? '—')}<br/>` +
+        `Destinatar: ${escapeHtml(shipping.fullName)}<br/>Telefon: ${escapeHtml(shipping.phone)}<br/>` +
+        `Plată: card la locker (ramburs posibil)</p>`
       : `<h3>Livrare — curier la adresă</h3><p>Nume: <strong>${escapeHtml(shipping.fullName)}</strong><br/>` +
         `Email: ${escapeHtml(shipping.email)}<br/>Telefon: ${escapeHtml(shipping.phone)}<br/>` +
         `Adresă: ${escapeHtml(address.join(', '))}</p>`) +
@@ -176,9 +188,12 @@ function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtota
 }
 
 /** Confirmation email to the customer (with download links for digital items). */
-function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliveryMethod, easybox, shippingCost, total, digitalLinks }) {
-  const isEasybox = deliveryMethod === 'easybox'
+function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliveryMethod, pickupPoint, shippingCost, total, digitalLinks }) {
+  const isPickup = deliveryMethod === 'easybox' || deliveryMethod === 'fanbox'
   const address = addressLines(shipping)
+  const paymentNote = isPickup
+    ? `Plata se face cu cardul la locker, la ridicarea coletului. Poți alege și ramburs la locker.\n`
+    : `Nu se plătește nimic online — te contactăm pentru confirmare și livrare.\n`
   const digitalText = digitalLinks.length
     ? `\n== Produse digitale ==\n` +
       digitalLinks
@@ -190,13 +205,13 @@ function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliv
   const text =
     `Salut, ${shipping.fullName}!\n\n` +
     `Comanda ta la ${brand} a fost înregistrată cu numărul ${reference}.\n` +
-    `Nu se plătește nimic online — te contactăm pentru confirmare și livrare.\n\n` +
-    `== Produse ==\n${lines.map(lineText).join('\n')}\n` +
+    paymentNote +
+    `\n== Produse ==\n${lines.map(lineText).join('\n')}\n` +
     `Subtotal: ${subtotal.toFixed(2)} RON\n` +
     `Transport: ${Number(shippingCost || 0).toFixed(2)} RON\n` +
     `TOTAL: ${Number(total || subtotal).toFixed(2)} RON\n\n` +
-    (isEasybox
-      ? `Livrare la EasyBox: ${easybox?.name ?? '—'} (${easybox?.address ?? '—'})\nDestinatar: ${shipping.fullName}, ${shipping.phone}\n`
+    (isPickup
+      ? `Livrare la ${pickupLabel(deliveryMethod)}: ${pickupPoint?.name ?? '—'} (${pickupPoint?.address ?? '—'})\nDestinatar: ${shipping.fullName}, ${shipping.phone}\n`
       : `Livrare la adresă: ${address.join(', ')}\n`) +
     digitalText +
     `\nCu drag, echipa ${brand}.`
@@ -205,11 +220,11 @@ function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliv
     `<p>Salut, <strong>${escapeHtml(shipping.fullName)}</strong>!</p>` +
     `<p>Comanda ta la <strong>${escapeHtml(brand)}</strong> a fost înregistrată cu numărul ` +
     `<strong>${escapeHtml(reference)}</strong>.</p>` +
-    `<p>Nu se plătește nimic online — te contactăm pentru confirmare și livrare.</p>` +
+    `<p>${escapeHtml(paymentNote.trim())}</p>` +
     linesTable(lines) +
     totalsRowsHtml(subtotal, shippingCost, total) +
-    (isEasybox
-      ? `<h3>Livrare — EasyBox</h3><p>${escapeHtml(easybox?.name ?? '—')}<br/>${escapeHtml(easybox?.address ?? '—')}<br/>` +
+    (isPickup
+      ? `<h3>Livrare — ${pickupLabel(deliveryMethod)}</h3><p>${escapeHtml(pickupPoint?.name ?? '—')}<br/>${escapeHtml(pickupPoint?.address ?? '—')}<br/>` +
         `Destinatar: ${escapeHtml(shipping.fullName)}, ${escapeHtml(shipping.phone)}</p>`
       : `<h3>Livrare</h3><p>${escapeHtml(address.join(', '))}</p>`) +
     (digitalLinks.length
@@ -264,7 +279,12 @@ function buildStatusEmail({ brand, reference, status, shipping }) {
 ordersRouter.post('/', optionalAuth, async (req, res) => {
   const rawLines = Array.isArray(req.body?.lines) ? req.body.lines : []
   const shipping = req.body?.shipping && typeof req.body.shipping === 'object' ? req.body.shipping : null
-  const deliveryMethod = req.body?.deliveryMethod === 'easybox' ? 'easybox' : 'courier'
+  const requestedMethod = req.body?.deliveryMethod
+  const deliveryMethod =
+    requestedMethod === 'easybox' || requestedMethod === 'fanbox' ? requestedMethod : 'courier'
+  const pickupName = cleanString(req.body?.pickupName ?? req.body?.fanboxName, 160)
+  const pickupAddress = cleanString(req.body?.pickupAddress ?? req.body?.fanboxAddress, 300)
+  // Legacy: older clients sent the SameDay locker id instead of free text.
   const easyboxId = cleanString(req.body?.easyboxId, 120)
 
   if (!shipping) {
@@ -277,11 +297,20 @@ ordersRouter.post('/', optionalAuth, async (req, res) => {
     return res.status(422).json({ error: 'Completează numele, emailul și telefonul.' })
   }
 
-  let easybox = null
-  if (deliveryMethod === 'easybox') {
-    easybox = await findLocker(easyboxId).catch(() => null)
-    if (!easybox) {
-      return res.status(422).json({ error: 'Alege un EasyBox valid pentru livrare.' })
+  let pickupPoint = null
+  if (deliveryMethod === 'easybox' || deliveryMethod === 'fanbox') {
+    const label = deliveryMethod === 'fanbox' ? 'FANbox' : 'EasyBox'
+    if (pickupName && pickupAddress) {
+      pickupPoint = { name: pickupName, address: pickupAddress }
+    } else if (deliveryMethod === 'easybox' && easyboxId) {
+      // Legacy clients: resolve the locker from the SameDay list.
+      const locker = await findLocker(easyboxId).catch(() => null)
+      if (locker) pickupPoint = { name: locker.name, address: locker.address }
+    }
+    if (!pickupPoint) {
+      return res.status(422).json({
+        error: `Completează numele lockerului ${label} și adresa exactă a acestuia.`,
+      })
     }
   }
 
@@ -308,11 +337,12 @@ ordersRouter.post('/', optionalAuth, async (req, res) => {
     const locality = cleanString(shipping.locality, 120)
     const street = cleanString(shipping.street, 200)
     const number = cleanString(shipping.number, 40)
-    if (hasPhysical && (!county || !locality || !street || !number)) {
+    if (hasPhysical && deliveryMethod === 'courier' && (!county || !locality || !street || !number)) {
       return res.status(422).json({ error: 'Completează toate câmpurile obligatorii de adresă.' })
     }
 
-    const fee = deliveryMethod === 'easybox' ? SHIPPING_FEES.easybox : SHIPPING_FEES.courier
+    const fees = await getShippingFees()
+    const fee = fees[deliveryMethod] ?? fees.courier
     const { subtotal, shipping: shippingCost, total } = computeOrderTotals(
       lines,
       hasPhysical ? fee : 0,
@@ -401,7 +431,7 @@ ordersRouter.post('/', optionalAuth, async (req, res) => {
          VALUES ($1,$2,$3,'pending',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
         [
           orderId, reference, ownerId, subtotal, deliveryMethod,
-          easybox ? easybox.name : null, easybox ? easybox.address : null,
+          pickupPoint ? pickupPoint.name : null, pickupPoint ? pickupPoint.address : null,
           shippingCost, total, shipObj.fullName, shipObj.email, shipObj.phone,
           shipObj.county, shipObj.locality, shipObj.street, shipObj.number,
           shipObj.block, shipObj.staircase, shipObj.floor, shipObj.apartment,
@@ -449,7 +479,7 @@ ordersRouter.post('/', optionalAuth, async (req, res) => {
       const { text, html } = buildOwnerEmail({
         brand, reference, createdAt: draft.createdAt, lines: draft.lines,
         shipping: draft.shipping, subtotal, deliveryMethod: draft.deliveryMethod,
-        easybox: draft.easybox, shippingCost: draft.shippingCost, total: draft.total,
+        pickupPoint: draft.pickupPoint, shippingCost: draft.shippingCost, total: draft.total,
         adminUrl: `${getPublicUrl()}/admin`,
       })
       sendMail({ to: owner, subject: `Comandă nouă ${reference} — ${brand}`, text, html }).catch(
@@ -459,7 +489,7 @@ ordersRouter.post('/', optionalAuth, async (req, res) => {
 
     const customerContent = buildCustomerEmail({
       brand, reference, lines: draft.lines, shipping: draft.shipping, subtotal,
-      deliveryMethod: draft.deliveryMethod, easybox: draft.easybox,
+      deliveryMethod: draft.deliveryMethod, pickupPoint: draft.pickupPoint,
       shippingCost: draft.shippingCost, total: draft.total, digitalLinks,
     })
     sendMail({

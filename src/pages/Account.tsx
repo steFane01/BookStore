@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { CustomerAddress, OrderDraft } from '../types'
 import { useAuth } from '../context/AuthContext'
+import { useDialog } from '../context/DialogContext'
 import { orderService } from '../services/orderService'
 import { addressService } from '../services/addressService'
 import { FormField } from '../components/FormField'
@@ -218,6 +219,7 @@ function AddressesTab({
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const { confirm, alert } = useDialog()
 
   const [label, setLabel] = useState('')
   const [recipient, setRecipient] = useState('')
@@ -306,13 +308,24 @@ function AddressesTab({
   }
 
   const removeAddress = async (id: string) => {
+    const ok = await confirm({
+      title: 'Ștergi adresa?',
+      message: 'Adresa salvată va fi eliminată din contul tău.',
+      confirmLabel: 'Șterge adresa',
+      tone: 'danger',
+    })
+    if (!ok) return
     const previous = addresses
     setAddresses((prev) => prev.filter((a) => a.id !== id))
     try {
       await addressService.remove(userId, id)
     } catch (err) {
       setAddresses(previous)
-      alert(err instanceof Error ? err.message : 'Nu am putut șterge adresa.')
+      await alert({
+        title: 'Adresa nu a putut fi ștearsă',
+        message: err instanceof Error ? err.message : 'Nu am putut șterge adresa.',
+        tone: 'danger',
+      })
     }
   }
 

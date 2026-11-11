@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Book, ProductCategory } from '../../types'
 import { bookService } from '../../services/bookService'
+import { useDialog } from '../../context/DialogContext'
 import { FormField } from '../../components/FormField'
 
 /** Category management — the owner can add/rename/reorder collections. */
@@ -20,6 +21,7 @@ export function AdminCategories({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const { confirm } = useDialog()
 
   const reset = () => {
     setEditingId(null)
@@ -56,7 +58,13 @@ export function AdminCategories({
   }
 
   const remove = async (category: ProductCategory) => {
-    if (!window.confirm(`Ștergi categoria „${category.name}”?`)) return
+    const ok = await confirm({
+      title: 'Ștergi categoria?',
+      message: `Categoria „${category.name}” va fi ștearsă. Produsele rămân în catalog, dar fără categorie.`,
+      confirmLabel: 'Șterge categoria',
+      tone: 'danger',
+    })
+    if (!ok) return
     setBusy(true)
     setError(null)
     try {
@@ -101,7 +109,7 @@ export function AdminCategories({
         </ul>
       </div>
 
-      <form onSubmit={submit} className="flex h-fit flex-col gap-4 border border-ink/10 bg-paper-50 p-5">
+      <form onSubmit={submit} noValidate className="flex h-fit flex-col gap-4 border border-ink/10 bg-paper-50 p-5">
         <p className="font-serif text-xl text-ink">
           {editingId ? 'Editează categoria' : 'Adaugă o categorie'}
         </p>

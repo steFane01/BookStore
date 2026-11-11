@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { DeliveryMethod, OrderDraft } from '../types'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
+import { useSettings } from '../context/SettingsContext'
 import { OrderSummary } from '../components/OrderSummary'
 import { CheckoutForm } from '../components/CheckoutForm'
 import { AnimatedSection } from '../components/AnimatedSection'
@@ -13,6 +14,7 @@ export default function Checkout() {
   const navigate = useNavigate()
   const { items, subtotal, clearCart } = useCart()
   const { user } = useAuth()
+  const { settings } = useSettings()
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('courier')
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -53,12 +55,12 @@ export default function Checkout() {
           Înapoi
         </button>
         <SectionHeading
-          eyebrow="Finalizare comandă"
-          title={isDigitalOnly ? 'Detalii de contact' : 'Detalii de livrare'}
+          eyebrow={settings.checkoutEyebrow}
+          title={isDigitalOnly ? settings.checkoutTitleDigital : settings.checkoutTitlePhysical}
           description={
             isDigitalOnly
-              ? 'Produsele digitale se livrează instant, fără costuri de transport.'
-              : 'Completează datele pentru livrare. Nu efectuăm plata online.'
+              ? settings.checkoutDescriptionDigital
+              : settings.checkoutDescriptionPhysical
           }
         />
 

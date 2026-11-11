@@ -4,6 +4,7 @@ import type { Book, ProductVariant } from '../types'
 import { bookService } from '../services/bookService'
 import { usePageMeta } from '../hooks/usePageMeta'
 import { useJsonLd } from '../hooks/useJsonLd'
+import { useSettings } from '../context/SettingsContext'
 import { BookCover } from '../components/BookCover'
 import { QuantitySelector } from '../components/QuantitySelector'
 import { AnimatedSection } from '../components/AnimatedSection'
@@ -16,6 +17,7 @@ export default function BookDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { addItem } = useCart()
+  const { settings } = useSettings()
 
   const [book, setBook] = useState<Book | null>(null)
   const [loading, setLoading] = useState(true)
@@ -98,6 +100,9 @@ export default function BookDetail() {
     : book.stock
   const inStock = effectiveStock > 0
   const isDigital = book.productType === 'digital'
+  const shippingDelivery = book.shippingInfo?.delivery || settings.deliveryInfo
+  const shippingPayment = book.shippingInfo?.payment || settings.paymentInfo
+  const shippingReturns = book.shippingInfo?.returns || settings.returnsInfo
   const needsVariant =
     !!book.variants && book.variants.length > 0 && !selectedVariant
 
@@ -223,8 +228,8 @@ export default function BookDetail() {
       <AnimatedSection className="border-y border-ink/10 bg-paper-200/50 py-20">
         <div className="container-page">
           <SectionHeading
-            eyebrow={isDigital ? 'Despre produs' : 'Despre carte'}
-            title="Povestea din spatele paginilor"
+            eyebrow={isDigital ? settings.bookAboutEyebrowDigital : settings.bookAboutEyebrow}
+            title={settings.bookAboutTitle}
           />
           <div className="mt-8 max-w-3xl">
             <p className="max-w-2xl whitespace-pre-line leading-relaxed text-ink-light">
@@ -242,18 +247,12 @@ export default function BookDetail() {
             </div>
           )}
 
-          {/* Physical shipping / returns info */}
-          {!isDigital && book.shippingInfo && (
+          {/* Physical shipping / returns info (product data, else store defaults) */}
+          {!isDigital && (
             <div className="mt-8 grid max-w-3xl gap-4 sm:grid-cols-3">
-              {book.shippingInfo.delivery && (
-                <InfoCard title="Livrare" text={book.shippingInfo.delivery} />
-              )}
-              {book.shippingInfo.payment && (
-                <InfoCard title="Plată" text={book.shippingInfo.payment} />
-              )}
-              {book.shippingInfo.returns && (
-                <InfoCard title="Returnare" text={book.shippingInfo.returns} />
-              )}
+              {shippingDelivery && <InfoCard title="Livrare" text={shippingDelivery} />}
+              {shippingPayment && <InfoCard title="Plată" text={shippingPayment} />}
+              {shippingReturns && <InfoCard title="Returnare" text={shippingReturns} />}
             </div>
           )}
         </div>
@@ -262,7 +261,7 @@ export default function BookDetail() {
       {/* Fragment din carte — printed page look (books only) */}
       {!isDigital && book.excerpt && (
         <AnimatedSection className="container-page py-20">
-          <SectionHeading eyebrow="Fragment din carte" title="Un început de lectură" />
+          <SectionHeading eyebrow={settings.bookExcerptEyebrow} title={settings.bookExcerptTitle} />
           <div className="mx-auto mt-10 max-w-2xl">
             <div className="border border-ink/15 bg-paper-50 p-8 shadow-soft md:p-12">
               <div className="mb-8 flex items-center justify-between border-b border-ink/10 pb-4 text-xs uppercase tracking-widest text-ink-muted">
@@ -285,7 +284,7 @@ export default function BookDetail() {
       {/* Detalii */}
       <AnimatedSection className="border-t border-ink/10 bg-paper-200/50 py-20">
         <div className="container-page">
-          <SectionHeading eyebrow="Detalii" title="Date despre ediție" />
+          <SectionHeading eyebrow={settings.bookDetailsEyebrow} title={settings.bookDetailsTitle} />
           <dl className="mt-8 grid max-w-3xl grid-cols-1 gap-x-10 gap-y-2 sm:grid-cols-2">
             {book.author && <DetailRow label="Autor" value={book.author} />}
             {book.isbn && <DetailRow label="ISBN" value={book.isbn} />}
@@ -302,7 +301,7 @@ export default function BookDetail() {
 
       {book.gallery && book.gallery.length > 0 && (
         <AnimatedSection className="container-page py-20">
-          <SectionHeading eyebrow="Galerie foto" title="Imagini" />
+          <SectionHeading eyebrow={settings.bookGalleryEyebrow} title={settings.bookGalleryTitle} />
           <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
             {book.gallery.map((src, i) => (
               <a

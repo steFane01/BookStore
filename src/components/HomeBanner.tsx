@@ -35,14 +35,14 @@ export function HomeBanner({ categories }: CategoryShowcaseProps) {
               className="group flex flex-col justify-between rounded-sm border border-ink/10 bg-paper-50 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-oxblood/40 hover:shadow-lift"
             >
               <div>
-                <p className="eyebrow">Colecția</p>
+                <p className="eyebrow">{settings.homeHeroEyebrow}</p>
                 <h2 className="serif-display mt-2 text-3xl text-ink">{cat.name}</h2>
                 <p className="mt-3 text-sm leading-relaxed text-ink-muted">
                   {cat.blurb}
                 </p>
               </div>
               <span className="mt-6 inline-flex items-center gap-2 text-sm font-medium tracking-wide text-oxblood transition-colors group-hover:text-oxblood-dark">
-                Explorează
+                {settings.homeHeroCta}
                 <IconArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
               </span>
             </Link>
