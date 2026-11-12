@@ -20,8 +20,10 @@ open http://localhost:8080
 > **Producție:** pașii completi (domeniu, VPS, HTTPS, auto-deploy din Git,
 > credențiale, backup, monitorizare) sunt în [`DEPLOY.md`](./DEPLOY.md).
 
-The first `db` container boot applies `sql/init/01_schema.sql` then
-`sql/init/02_seed.sql` automatically (filename order, only on an empty volume).
+The first `db` container boot applies every `sql/init/*.sql` file automatically,
+in filename order, only on an empty volume (`01_schema`, `02_seed`, then the
+incremental migrations up to `06_migration_category_pages`). On existing volumes
+`backend/src/db.js#ensureSchema()` applies the same idempotent changes at boot.
 
 ## Services
 
@@ -89,6 +91,7 @@ The `backend/` image serves the real Express API backed by Postgres:
 - `GET/PUT /api/settings` — owner-editable storefront content (brand, contact, legal)
 - `POST /api/forms/contact|newsletter` — public forms (rate limited)
 - `GET/DELETE /api/newsletter[/:email]` + `GET /api/newsletter/export` — subscribers (admin)
+- `POST /api/newsletter/send` — trimite emailul de ofertă tuturor abonaților (admin; `testTo` pentru o copie de test)
 - `POST /api/orders` — place an order (guest or signed-in): prices and stock are
   re-read from the catalog, stock is reserved inside the transaction, the owner
   gets the full delivery details by email and the customer gets a confirmation

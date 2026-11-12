@@ -4,6 +4,7 @@ import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useEscape, useLockBody } from '../hooks/useEscape'
 import { useSettings } from '../context/SettingsContext'
+import { LiveSearch } from './LiveSearch'
 import { IconClose, IconUser, IconCart } from './icons'
 
 interface MobileNavigationProps {
@@ -55,7 +56,7 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
       />
       {/* Panel */}
       <div
-        className={`absolute inset-0 flex flex-col bg-paper-100 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        className={`absolute inset-0 flex flex-col overflow-y-auto bg-paper-100 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           open ? 'translate-y-0' : '-translate-y-full'
         }`}
         role="dialog"
@@ -74,7 +75,11 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
           </button>
         </div>
 
-        <nav className="container-page mt-8 flex flex-col gap-1" aria-label="Navigare mobilă">
+        <div className="container-page mt-4">
+          <LiveSearch variant="drawer" onNavigate={onClose} />
+        </div>
+
+        <nav className="container-page mt-6 flex flex-col gap-1" aria-label="Navigare mobilă">
           {[...navItems, ...(isAdmin ? [{ to: '/admin', label: 'Admin' }] : [])].map(
             (item, i) => (
               <NavLink

@@ -5,6 +5,8 @@ import { FormField } from '../components/FormField'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
 import { IconArrowLeft } from '../components/icons'
+import { PasswordChecklist } from '../components/PasswordChecklist'
+import { validatePassword } from '../utils/password'
 
 type Mode = 'login' | 'register' | 'forgot'
 
@@ -37,8 +39,9 @@ export default function Auth() {
         await login(email, password)
         navigate('/', { replace: true })
       } else if (mode === 'register') {
-        if (password.length < 8) {
-          setError('Parola trebuie să aibă cel puțin 8 caractere.')
+        const passwordError = validatePassword(password)
+        if (passwordError) {
+          setError(passwordError)
           return
         }
         if (password !== confirm) {
@@ -128,6 +131,7 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 />
+                {mode === 'register' && <PasswordChecklist password={password} className="mt-1" />}
               </FormField>
             )}
 
@@ -190,10 +194,6 @@ export default function Auth() {
             </button>
           )}
         </form>
-
-        <p className="mt-8 text-center text-xs text-ink-muted">
-          Demo: cititor@example.com / parola123 · admin@libraria.ro / admin123
-        </p>
       </AnimatedSection>
     </div>
   )

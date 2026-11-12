@@ -6,8 +6,10 @@ import { CartProvider } from './context/CartContext'
 import { DialogProvider } from './context/DialogContext'
 import { Header } from './components/Header'
 import { Footer } from './components/Footer'
+import { NewsletterPopup } from './components/NewsletterPopup'
 
 import Home from './pages/Home'
+import CategoryPage from './pages/CategoryPage'
 import BookDetail from './pages/BookDetail'
 import Checkout from './pages/Checkout'
 import OrderSuccess from './pages/OrderSuccess'
@@ -39,11 +41,13 @@ export default function App() {
         <CartProvider>
           <DialogProvider>
             <ScrollToTop />
+            <NewsletterPopup />
             <div className="flex min-h-screen flex-col">
               <Header />
               <main className="flex-1">
                 <Routes>
                   <Route path="/" element={<Home />} />
+                  <Route path="/categorie/:slug" element={<CategoryPage />} />
                   <Route path="/carte/:id" element={<BookDetail />} />
                   <Route path="/comanda" element={<Checkout />} />
                   <Route path="/comanda/:id" element={<OrderSuccess />} />

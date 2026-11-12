@@ -5,6 +5,8 @@ import { FormField } from '../components/FormField'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
 import { IconCheck, IconArrowLeft } from '../components/icons'
+import { PasswordChecklist } from '../components/PasswordChecklist'
+import { validatePassword } from '../utils/password'
 
 /**
  * Password reset page.
@@ -26,8 +28,9 @@ export default function ResetPassword() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (password.length < 8) {
-      setError('Parola trebuie să aibă cel puțin 8 caractere.')
+    const passwordError = validatePassword(password)
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     if (password !== confirm) {
@@ -84,6 +87,7 @@ export default function ResetPassword() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <PasswordChecklist password={password} className="mt-1" />
               </FormField>
               <FormField label="Confirmă parola" htmlFor="reset-confirm" required>
                 <input

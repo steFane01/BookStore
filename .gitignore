@@ -34,3 +34,5 @@ npm-debug.log*
 
 # --- Docker ---
 .docker/
+
+DEPLOY.md

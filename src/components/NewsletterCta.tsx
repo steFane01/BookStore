@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { IconCheck } from './icons'
 import { subscribeNewsletter } from '../services/formsService'
 import { useSettings } from '../context/SettingsContext'
+import { markNewsletterSubscribed } from '../utils/newsletterPrompt'
 
 /**
  * Editorial newsletter call-to-action block. "Mă abonez" sends a confirmation
@@ -30,6 +31,8 @@ export function NewsletterCta() {
     setError(null)
     try {
       await subscribeNewsletter(email)
+      // Same memory as the popup: don't invite this reader again.
+      markNewsletterSubscribed()
       setSubmitted(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Nu am putut trimite. Încearcă din nou.')

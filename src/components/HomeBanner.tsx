@@ -12,8 +12,8 @@ interface CategoryShowcaseProps {
  *
  * Renders the three canonical RV STUDIO storefront categories (Cărți, Produse
  * Digitale, Diverse & Accesorii) as a light, editorial grid on top of the
- * shared category artwork. Each card links to the catalog filtered by that
- * category (`/?categorie=<id>`).
+ * shared category artwork. Each card opens that category's own page
+ * (`/categorie/<slug>`).
  */
 export function HomeBanner({ categories }: CategoryShowcaseProps) {
   const { settings } = useSettings()
@@ -31,7 +31,7 @@ export function HomeBanner({ categories }: CategoryShowcaseProps) {
           {categories.map((cat) => (
             <Link
               key={cat.id}
-              to={`/?categorie=${encodeURIComponent(cat.slug ?? cat.id)}`}
+              to={`/categorie/${encodeURIComponent(cat.slug ?? cat.id)}`}
               className="group flex flex-col justify-between rounded-sm border border-ink/10 bg-paper-50 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-oxblood/40 hover:shadow-lift"
             >
               <div>

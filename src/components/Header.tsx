@@ -7,6 +7,7 @@ import { MobileNavigation } from './MobileNavigation'
 import { CartDrawer } from './CartDrawer'
 import { AccountMenu } from './AccountMenu'
 import { BrandLogo } from './BrandLogo'
+import { LiveSearch } from './LiveSearch'
 import { IconCart, IconMenu, IconUser } from './icons'
 
 const navItems = [
@@ -21,14 +22,6 @@ export function Header() {
   const { isAuthenticated, isAdmin } = useAuth()
   const navigate = useNavigate()
   const { settings } = useSettings()
-  const [query, setQuery] = useState('')
-
-  const onSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    const term = query.trim()
-    navigate(term ? `/?q=${encodeURIComponent(term)}` : '/')
-    setMobileOpen(false)
-  }
 
   const onLogo = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -73,20 +66,10 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Search */}
-          <form onSubmit={onSearch} className="hidden flex-1 items-center justify-end gap-2 lg:flex" role="search">
-            <label htmlFor="site-search" className="sr-only">
-              Caută în magazin
-            </label>
-            <input
-              id="site-search"
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Caută un titlu sau un autor…"
-              className="w-full max-w-xs border border-ink/15 bg-transparent px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-brass focus:outline-none"
-            />
-          </form>
+          {/* Search — live results dropdown */}
+          <div className="hidden flex-1 justify-end lg:flex">
+            <LiveSearch />
+          </div>
 
           {/* Actions */}
           <div className="flex items-center gap-1 sm:gap-2">

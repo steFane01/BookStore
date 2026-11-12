@@ -123,13 +123,19 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `)
+  // Category landing pages (owner-editable description + image).
+  await pool.query(
+    `ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''`,
+  )
+  await pool.query(`ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS image_url TEXT`)
+  // DO NOTHING: the owner may rename/redescribe a category from the admin panel;
+  // a restart must not overwrite those edits with the built-in defaults.
   await pool.query(`
     INSERT INTO product_categories (id, name, slug, blurb, sort) VALUES
       ('carti',           'Cărți',             'carti',            'Cărți tipărite cu răbdare.', 1),
       ('produse-digitale','Produse Digitale',  'produse-digitale', 'Fișiere, cursuri și acces digital cu livrare automată.', 2),
       ('diverse-accesorii','Diverse & Accesorii','diverse-accesorii','Accesorii și obiecte care însoțesc lectura.', 3)
-    ON CONFLICT (id) DO UPDATE SET
-      name = EXCLUDED.name, slug = EXCLUDED.slug, blurb = EXCLUDED.blurb, sort = EXCLUDED.sort
+    ON CONFLICT (id) DO NOTHING
   `)
 
   // ---- addresses ----

@@ -10,6 +10,7 @@ import {
 import type { User } from '../types'
 import { authService } from '../services/authService'
 import { getToken, setToken } from '../services/http'
+import { requestNewsletterPrompt } from '../utils/newsletterPrompt'
 
 interface AuthContextValue {
   user: User | null
@@ -47,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
+    // Every sign-in invites the reader to the newsletter (unless already
+    // subscribed); admins never see the storefront popup.
+    if (u.role !== 'admin') requestNewsletterPrompt()
   }, [])
 
   const register = useCallback(
@@ -59,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // ignore
       }
+      if (u.role !== 'admin') requestNewsletterPrompt()
     },
     [],
   )

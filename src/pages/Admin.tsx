@@ -14,8 +14,9 @@ import { AdminOrders } from './admin/AdminOrders'
 import { AdminCategories } from './admin/AdminCategories'
 import { AdminSettings } from './admin/AdminSettings'
 import { AdminNewsletter } from './admin/AdminNewsletter'
+import { AdminNewsletterCampaign } from './admin/AdminNewsletterCampaign'
 
-type Tab = 'dashboard' | 'catalog' | 'categories' | 'orders' | 'newsletter' | 'settings'
+type Tab = 'dashboard' | 'catalog' | 'categories' | 'orders' | 'newsletter' | 'campaign' | 'settings'
 
 export default function Admin() {
   const navigate = useNavigate()
@@ -87,6 +88,7 @@ export default function Admin() {
     { key: 'categories', label: 'Categorii' },
     { key: 'orders', label: 'Comenzi' },
     { key: 'newsletter', label: 'Abonați' },
+    { key: 'campaign', label: 'Campanie email' },
     { key: 'settings', label: 'Setări' },
   ]
 
@@ -136,6 +138,7 @@ export default function Admin() {
           )}
           {tab === 'orders' && <AdminOrders orders={orders} onRefresh={loadAll} />}
           {tab === 'newsletter' && <AdminNewsletter />}
+          {tab === 'campaign' && <AdminNewsletterCampaign />}
           {tab === 'settings' && <AdminSettings />}
         </div>
       </div>

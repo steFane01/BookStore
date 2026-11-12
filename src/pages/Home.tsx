@@ -12,6 +12,7 @@ import { AnimatedSection } from '../components/AnimatedSection'
 import { BookGrid } from '../components/BookGrid'
 import { NewsletterCta } from '../components/NewsletterCta'
 import { IconFeather } from '../components/icons'
+import { matchesSearch } from '../utils/search'
 
 const INTRO_SESSION_KEY = 'libraria.intro-seen'
 
@@ -41,6 +42,16 @@ export default function Home() {
   const [searchInput, setSearchInput] = useState(query)
 
   useEffect(() => setSearchInput(query), [query])
+
+  // A search started from the header lands on the homepage: bring the results
+  // into view instead of leaving the visitor at the top of the page. Searching
+  // inside the catalog input must not re-scroll the page while typing.
+  useEffect(() => {
+    if (!query.trim() || loading) return
+    if (document.activeElement?.id === 'catalog-search') return
+    const section = document.getElementById('catalog')
+    section?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [query, loading])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -98,12 +109,20 @@ export default function Home() {
   )
 
   const visibleBooks = useMemo(() => {
-    const term = query.trim().toLowerCase()
+    const term = query.trim()
     const list = term
       ? books.filter((book) =>
-          `${book.title} ${book.author} ${book.category ?? ''} ${book.shortDescription}`
-            .toLowerCase()
-            .includes(term),
+          matchesSearch(
+            [
+              book.title,
+              book.author,
+              book.category ?? '',
+              book.shortDescription,
+              book.isbn ?? '',
+              (book.tags ?? []).join(' '),
+            ].join(' '),
+            term,
+          ),
         )
       : books
     const sorted = [...list]
@@ -152,7 +171,8 @@ export default function Home() {
       </AnimatedSection>
 
       {/* Catalog */}
-      <AnimatedSection className="container-page pb-20 md:pb-28">
+      <div id="catalog" className="scroll-mt-24">
+        <AnimatedSection className="container-page pb-20 md:pb-28">
         <div className="flex items-end justify-between gap-6">
           <SectionHeading
             eyebrow={settings.homeCatalogEyebrow}
@@ -202,9 +222,21 @@ export default function Home() {
         </div>
 
         {query && (
-          <p className="mt-4 text-sm text-ink-muted">
-            {visibleBooks.length} rezultat{visibleBooks.length === 1 ? '' : 'e'} pentru „{query}”
-          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-muted">
+            <span>
+              {visibleBooks.length} rezultat{visibleBooks.length === 1 ? '' : 'e'} pentru „{query}”
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput('')
+                setParam('q', '')
+              }}
+              className="text-xs uppercase tracking-wider text-oxblood underline-offset-4 hover:underline"
+            >
+              Șterge căutarea
+            </button>
+          </div>
         )}
 
         <div className="mt-10">
@@ -226,7 +258,8 @@ export default function Home() {
             </p>
           )}
         </div>
-      </AnimatedSection>
+        </AnimatedSection>
+      </div>
 
       <NewsletterCta />
     </>

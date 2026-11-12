@@ -10,6 +10,10 @@ import { api, HttpError } from './http'
 export interface CategoryInput {
   name: string
   blurb?: string
+  /** Longer description for the category landing page. */
+  description?: string
+  /** Wide image for the category landing page (owner upload). */
+  imageUrl?: string
   sort?: number
 }
 
@@ -18,6 +22,13 @@ export const bookService = {
   async getBooks(category?: string): Promise<Book[]> {
     const query = category ? `?categorie=${encodeURIComponent(category)}` : ''
     return api<Book[]>(`/books${query}`)
+  },
+
+  /** Live search across the active catalog (accent-insensitive). */
+  async searchBooks(term: string): Promise<Book[]> {
+    const query = term.trim()
+    if (!query) return []
+    return api<Book[]>(`/books?q=${encodeURIComponent(query)}`, { authed: false })
   },
 
   /** The storefront categories (owner-managed). */

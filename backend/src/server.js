@@ -33,6 +33,7 @@ import { newsletterRouter } from './routes/newsletter.js'
  *   GET/PUT /api/settings                 -> owner-editable storefront content
  *   POST /api/forms/contact|newsletter    -> public forms
  *   GET/DELETE /api/newsletter[/:email]   -> subscriber list + CSV export (admin)
+ *   POST /api/newsletter/send             -> send the offer email to subscribers (admin)
  *   POST /api/orders                      -> place an order (guest or signed-in)
  *   GET  /api/orders[/all]                -> own orders / every order (admin)
  *   POST /api/orders/lookup               -> guest order tracking (reference + email)
@@ -93,6 +94,7 @@ app.use('/api/auth/request-password-reset', rateLimit({ windowMs: 60 * 60_000, m
 app.use('/api/auth/reset-password', rateLimit({ windowMs: 60 * 60_000, max: 10, message: tooMany }))
 app.use('/api/auth/change-password', rateLimit({ windowMs: 15 * 60_000, max: 10, message: tooMany }))
 app.use('/api/forms', rateLimit({ windowMs: 10 * 60_000, max: 8, message: tooMany }))
+app.use('/api/newsletter/send', rateLimit({ windowMs: 60_000, max: 3, message: tooMany }))
 app.use('/api/orders/lookup', rateLimit({ windowMs: 15 * 60_000, max: 20, message: tooMany }))
 const orderCreateLimiter = rateLimit({ windowMs: 60 * 60_000, max: 10, message: tooMany })
 app.use('/api/orders', (req, res, next) =>
@@ -145,7 +147,16 @@ app.get('/sitemap.xml', async (_req, res) => {
   } catch (err) {
     console.warn('[libraria] sitemap: books unavailable:', err.message)
   }
-  const urls = [`${base}/`, `${base}/despre`, `${base}/contact`, ...productUrls]
+  let categoryUrls = []
+  try {
+    const { rows } = await pool.query(
+      'SELECT slug FROM product_categories ORDER BY sort ASC, name ASC',
+    )
+    categoryUrls = rows.map((row) => `${base}/categorie/${encodeURIComponent(row.slug)}`)
+  } catch (err) {
+    console.warn('[libraria] sitemap: categories unavailable:', err.message)
+  }
+  const urls = [`${base}/`, `${base}/despre`, `${base}/contact`, ...categoryUrls, ...productUrls]
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +

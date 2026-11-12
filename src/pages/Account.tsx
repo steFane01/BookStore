@@ -9,7 +9,9 @@ import { FormField } from '../components/FormField'
 import { AnimatedSection } from '../components/AnimatedSection'
 import { SectionHeading } from '../components/SectionHeading'
 import { authService, orderStatusLabels } from '../services/authService'
+import { PasswordChecklist } from '../components/PasswordChecklist'
 import { formatPrice } from '../utils/format'
+import { validatePassword } from '../utils/password'
 import { IconLock } from '../components/icons'
 
 type Tab = 'profile' | 'addresses' | 'orders' | 'security'
@@ -509,8 +511,9 @@ function SecurityTab() {
     event.preventDefault()
     setError(null)
     setDone(false)
-    if (next.length < 8) {
-      setError('Parola nouă trebuie să aibă cel puțin 8 caractere.')
+    const passwordError = validatePassword(next, 'Parola nouă')
+    if (passwordError) {
+      setError(passwordError)
       return
     }
     if (next !== confirm) {
@@ -557,6 +560,7 @@ function SecurityTab() {
             onChange={(event) => setNext(event.target.value)}
             autoComplete="new-password"
           />
+          <PasswordChecklist password={next} className="mt-1" />
         </FormField>
         <FormField label="Confirmă parola nouă" htmlFor="sec-confirm" required>
           <input
@@ -581,8 +585,9 @@ function SecurityTab() {
         </button>
       </form>
       <p className="mt-6 text-xs leading-relaxed text-ink-muted">
-        Folosește o parolă de minim 8 caractere, unică pentru acest cont. Dacă ai uitat
-        parola, te poți deconecta și folosi „Am uitat parola” din pagina de autentificare.
+        Folosește o parolă de minim 8 caractere, cu o literă mare, o cifră și un caracter
+        special, unică pentru acest cont. Dacă ai uitat parola, te poți deconecta și folosi
+        „Am uitat parola” din pagina de autentificare.
       </p>
     </div>
   )

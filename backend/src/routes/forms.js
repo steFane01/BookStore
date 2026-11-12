@@ -2,8 +2,11 @@ import { Router } from 'express'
 import { pool } from '../db.js'
 import { sendMail, getContactRecipient } from '../mailer.js'
 import { getSiteName } from '../settings.js'
+import { getPublicUrl } from '../config.js'
 import { serverError } from '../lib/errors.js'
-import { cleanString, escapeHtml, isEmail } from '../lib/text.js'
+import { cleanString, escapeHtml } from '../lib/text.js'
+import { renderEmail } from '../lib/emailLayout.js'
+import { verifyEmail } from '../lib/emailDomain.js'
 
 export const formsRouter = Router()
 
@@ -19,8 +22,12 @@ formsRouter.post('/contact', async (req, res) => {
   const email = cleanString(req.body?.email, 200)
   const message = cleanString(req.body?.message, 4000)
 
-  if (!name || !isEmail(email) || !message) {
+  if (!name || !email || !message) {
     return res.status(422).json({ error: 'Numele, emailul și mesajul sunt obligatorii.' })
+  }
+  const emailCheck = await verifyEmail(email)
+  if (!emailCheck.ok) {
+    return res.status(422).json({ error: emailCheck.error })
   }
 
   const to = getContactRecipient()
@@ -31,18 +38,28 @@ formsRouter.post('/contact', async (req, res) => {
 
   const brand = await getSiteName()
   try {
+    const { text, html } = renderEmail({
+      brand,
+      eyebrow: 'Formular de contact',
+      title: `Mesaj nou de la ${name}`,
+      bodyHtml:
+        `<p style="margin:0 0 6px;"><span style="color:#6b6458;">Nume:</span> ${escapeHtml(name)}</p>` +
+        `<p style="margin:0 0 18px;"><span style="color:#6b6458;">Email:</span> ` +
+        `<a href="mailto:${escapeHtml(email)}" style="color:#642a2e;">${escapeHtml(email)}</a></p>` +
+        `<div style="white-space:pre-wrap;">${escapeHtml(message)}</div>`,
+      bodyText:
+        `Ai primit un mesaj din formularul de contact:\n\n` +
+        `Nume: ${name}\nEmail: ${email}\n\n${message}`,
+      cta: { label: 'Răspunde pe email', url: `mailto:${email}` },
+      footerHtml: [`Mesaj trimis din formularul de contact al site-ului ${escapeHtml(brand)}.`],
+      footerText: [`Mesaj trimis din formularul de contact al site-ului ${brand}.`],
+    })
     await sendMail({
       to,
       replyTo: email,
       subject: `Mesaj din formularul de contact — ${name} (${brand})`,
-      text:
-        `Ai primit un mesaj din formularul de contact:\n\n` +
-        `Nume: ${name}\nEmail: ${email}\n\n${message}`,
-      html:
-        `<p><strong>Ai primit un mesaj din formularul de contact:</strong></p>` +
-        `<p><strong>Nume:</strong> ${escapeHtml(name)}<br/>` +
-        `<strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>` +
-        `<hr/><div style="white-space:pre-wrap">${escapeHtml(message)}</div>`,
+      text,
+      html,
     })
     return res.json({ ok: true })
   } catch (err) {
@@ -58,8 +75,9 @@ formsRouter.post('/contact', async (req, res) => {
  */
 formsRouter.post('/newsletter', async (req, res) => {
   const email = cleanString(req.body?.email, 200).toLowerCase()
-  if (!isEmail(email)) {
-    return res.status(422).json({ error: 'Adresa de email nu este validă.' })
+  const emailCheck = await verifyEmail(email)
+  if (!emailCheck.ok) {
+    return res.status(422).json({ error: emailCheck.error })
   }
 
   try {
@@ -73,17 +91,25 @@ formsRouter.post('/newsletter', async (req, res) => {
   }
 
   const brand = await getSiteName()
+  const { text, html } = renderEmail({
+    brand,
+    eyebrow: 'Newsletter',
+    title: 'Mulțumim că te-ai abonat',
+    bodyHtml:
+      `<p style="margin:0 0 16px;">Mulțumim că te-ai abonat la newsletter-ul <strong>${escapeHtml(brand)}</strong>.</p>` +
+      `<p style="margin:0;">Vei primi vești despre produsele noi, din când în când.</p>`,
+    bodyText:
+      `Mulțumim că te-ai abonat la newsletter-ul ${brand}.\n\n` +
+      `Vei primi vești despre produsele noi, din când în când.`,
+    cta: { label: 'Vezi librăria', url: getPublicUrl() },
+    footerHtml: ['Te poți dezabona oricând printr-un simplu răspuns la acest email.'],
+    footerText: ['Te poți dezabona oricând printr-un simplu răspuns la acest email.'],
+  })
   sendMail({
     to: email,
     subject: `Abonare la newsletter — ${brand}`,
-    text:
-      `Mulțumim că te-ai abonat la newsletter-ul ${brand}.\n\n` +
-      `Vei primi vești despre produsele noi, din când în când.\n\n` +
-      `Cu drag, echipa ${brand}.`,
-    html:
-      `<p>Mulțumim că te-ai abonat la newsletter-ul <strong>${escapeHtml(brand)}</strong>.</p>` +
-      `<p>Vei primi vești despre produsele noi, din când în când.</p>` +
-      `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`,
+    text,
+    html,
   }).catch((mailErr) => console.warn('[libraria] newsletter email skipped:', mailErr.message))
 
   return res.json({ ok: true })

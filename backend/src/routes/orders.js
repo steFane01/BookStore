@@ -8,6 +8,8 @@ import { findLocker } from '../sameday.js'
 import { getSiteName, getShippingFees } from '../settings.js'
 import { ApiError, serverError } from '../lib/errors.js'
 import { cleanString, escapeHtml, isEmail } from '../lib/text.js'
+import { renderEmail } from '../lib/emailLayout.js'
+import { verifyEmail } from '../lib/emailDomain.js'
 import { computeOrderTotals, resolveOrderLines } from '../lib/pricing.js'
 
 export const ordersRouter = Router()
@@ -112,18 +114,22 @@ function lineText(line) {
   return `- ${line.title}${variant} (${line.author}) x${line.quantity} — ${Number(line.price).toFixed(2)} RON`
 }
 
-/** HTML table with the ordered products. */
+/** HTML table with the ordered products (brand paper/brass styling). */
 function linesTable(lines) {
   return (
-    `<table cellpadding="6" cellspacing="0" style="width:100%;border-collapse:collapse">` +
-    `<tr style="background:#f4f1ea"><th align="left">Produs</th><th align="right">Cant.</th>` +
-    `<th align="right">Preț</th></tr>` +
+    `<table cellpadding="8" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px;">` +
+    `<tr style="background-color:#ede4d5;color:#1c1a17;">` +
+    `<th align="left" style="font-family:Georgia,'Times New Roman',serif;font-weight:600;">Produs</th>` +
+    `<th align="right" style="font-family:Georgia,'Times New Roman',serif;font-weight:600;">Cant.</th>` +
+    `<th align="right" style="font-family:Georgia,'Times New Roman',serif;font-weight:600;">Preț</th></tr>` +
     lines
       .map(
         (line) =>
-          `<tr><td>${escapeHtml(line.title)}${line.variantName ? ` <em>(${escapeHtml(line.variantName)})</em>` : ''}` +
-          ` (${escapeHtml(line.author)})</td><td align="right">${line.quantity}</td>` +
-          `<td align="right">${(Number(line.price) * line.quantity).toFixed(2)} RON</td></tr>`,
+          `<tr><td style="border-bottom:1px solid #e2d6c1;">${escapeHtml(line.title)}` +
+          `${line.variantName ? ` <em>(${escapeHtml(line.variantName)})</em>` : ''}` +
+          ` <span style="color:#6b6458;">(${escapeHtml(line.author)})</span></td>` +
+          `<td align="right" style="border-bottom:1px solid #e2d6c1;">${line.quantity}</td>` +
+          `<td align="right" style="border-bottom:1px solid #e2d6c1;">${(Number(line.price) * line.quantity).toFixed(2)} RON</td></tr>`,
       )
       .join('') +
     `</table>`
@@ -133,9 +139,18 @@ function linesTable(lines) {
 /** Totals rows shared by both emails. */
 function totalsRowsHtml(subtotal, shippingCost, total) {
   return (
-    `<p style="margin:0">Subtotal: <strong>${subtotal.toFixed(2)} RON</strong><br/>` +
+    `<p style="margin:16px 0 0;font-size:14px;line-height:1.8;">` +
+    `Subtotal: <strong>${subtotal.toFixed(2)} RON</strong><br/>` +
     `Transport: ${Number(shippingCost || 0).toFixed(2)} RON<br/>` +
     `TOTAL: <strong>${Number(total || subtotal).toFixed(2)} RON</strong></p>`
+  )
+}
+
+/** Consistent small heading inside an email body. */
+function emailHeading(text) {
+  return (
+    `<h3 style="margin:22px 0 8px;font-family:Georgia,'Times New Roman',serif;` +
+    `font-size:17px;font-weight:600;line-height:1.3;color:#1c1a17;">${escapeHtml(text)}</h3>`
   )
 }
 
@@ -145,7 +160,7 @@ function pickupLabel(deliveryMethod) {
 }
 
 /** Email to the owner: everything needed to place the shipment manually. */
-function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtotal, deliveryMethod, pickupPoint, shippingCost, total, adminUrl }) {
+export function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtotal, deliveryMethod, pickupPoint, shippingCost, total, adminUrl }) {
   const isPickup = deliveryMethod === 'easybox' || deliveryMethod === 'fanbox'
   const address = addressLines(shipping)
   const notes = shipping.notes ? `Observații: ${shipping.notes}\n` : ''
@@ -154,7 +169,7 @@ function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtota
       `Plată: card la locker (ramburs posibil)\n${notes}`
     : `== Livrare: curier la adresă ==\nNume: ${shipping.fullName}\nEmail: ${shipping.email}\nTelefon: ${shipping.phone}\nAdresă: ${address.join(', ')}\n${notes}`
 
-  const text =
+  const bodyText =
     `Ai primit o comandă nouă pe ${brand}.\n\n` +
     `Număr comandă: ${reference}\n` +
     `Data: ${new Date(createdAt).toLocaleString('ro-RO')}\n\n` +
@@ -163,32 +178,39 @@ function buildOwnerEmail({ brand, reference, createdAt, lines, shipping, subtota
     `Transport: ${Number(shippingCost || 0).toFixed(2)} RON\n` +
     `TOTAL: ${Number(total || subtotal).toFixed(2)} RON\n\n` +
     `${deliveryText}\n` +
-    `Gestionează comanda: ${adminUrl}\n\n` +
     `Echipa ${brand}.`
 
-  const html =
-    `<p><strong>Ai primit o comandă nouă</strong> pe ${escapeHtml(brand)}.</p>` +
-    `<p style="color:#642A2E;font-size:1.15em"><strong>${escapeHtml(reference)}</strong></p>` +
-    `<p>Data: ${escapeHtml(new Date(createdAt).toLocaleString('ro-RO'))}</p>` +
-    linesTable(lines) +
+  const bodyHtml =
+    `<p style="margin:0 0 16px;">Ai primit o <strong>comandă nouă</strong> pe ${escapeHtml(brand)}.</p>` +
+    `<p style="margin:0 0 6px;"><span style="color:#6b6458;">Data:</span> ` +
+    `${escapeHtml(new Date(createdAt).toLocaleString('ro-RO'))}</p>` +
+    `<div style="margin:16px 0;">${linesTable(lines)}</div>` +
     totalsRowsHtml(subtotal, shippingCost, total) +
+    emailHeading(isPickup ? `Livrare — ${pickupLabel(deliveryMethod)}` : 'Livrare — curier la adresă') +
     (isPickup
-      ? `<h3>Livrare — ${pickupLabel(deliveryMethod)}</h3><p>Punct: <strong>${escapeHtml(pickupPoint?.name ?? '—')}</strong><br/>` +
+      ? `<p style="margin:0;">Punct: <strong>${escapeHtml(pickupPoint?.name ?? '—')}</strong><br/>` +
         `Adresă locker: ${escapeHtml(pickupPoint?.address ?? '—')}<br/>` +
         `Destinatar: ${escapeHtml(shipping.fullName)}<br/>Telefon: ${escapeHtml(shipping.phone)}<br/>` +
         `Plată: card la locker (ramburs posibil)</p>`
-      : `<h3>Livrare — curier la adresă</h3><p>Nume: <strong>${escapeHtml(shipping.fullName)}</strong><br/>` +
+      : `<p style="margin:0;">Nume: <strong>${escapeHtml(shipping.fullName)}</strong><br/>` +
         `Email: ${escapeHtml(shipping.email)}<br/>Telefon: ${escapeHtml(shipping.phone)}<br/>` +
         `Adresă: ${escapeHtml(address.join(', '))}</p>`) +
-    (shipping.notes ? `<p>Observații: ${escapeHtml(shipping.notes)}</p>` : '') +
-    `<p><a href="${escapeHtml(adminUrl)}">Deschide panoul de administrare</a></p>` +
-    `<p style="color:#642A2E">Echipa ${escapeHtml(brand)}.</p>`
+    (shipping.notes ? `<p style="margin:16px 0 0;">Observații: ${escapeHtml(shipping.notes)}</p>` : '')
 
-  return { text, html }
+  return renderEmail({
+    brand,
+    eyebrow: 'Comandă nouă',
+    title: `Comanda ${reference}`,
+    bodyHtml,
+    bodyText,
+    cta: { label: 'Deschide panoul de administrare', url: adminUrl },
+    footerHtml: [`Comandă plasată pe ${escapeHtml(brand)}.`],
+    footerText: [`Comandă plasată pe ${brand}.`],
+  })
 }
 
 /** Confirmation email to the customer (with download links for digital items). */
-function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliveryMethod, pickupPoint, shippingCost, total, digitalLinks }) {
+export function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliveryMethod, pickupPoint, shippingCost, total, digitalLinks }) {
   const isPickup = deliveryMethod === 'easybox' || deliveryMethod === 'fanbox'
   const address = addressLines(shipping)
   const paymentNote = isPickup
@@ -202,7 +224,7 @@ function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliv
       '\n'
     : ''
 
-  const text =
+  const bodyText =
     `Salut, ${shipping.fullName}!\n\n` +
     `Comanda ta la ${brand} a fost înregistrată cu numărul ${reference}.\n` +
     paymentNote +
@@ -216,36 +238,47 @@ function buildCustomerEmail({ brand, reference, lines, shipping, subtotal, deliv
     digitalText +
     `\nCu drag, echipa ${brand}.`
 
-  const html =
-    `<p>Salut, <strong>${escapeHtml(shipping.fullName)}</strong>!</p>` +
-    `<p>Comanda ta la <strong>${escapeHtml(brand)}</strong> a fost înregistrată cu numărul ` +
+  const bodyHtml =
+    `<p style="margin:0 0 16px;">Salut, <strong>${escapeHtml(shipping.fullName)}</strong>!</p>` +
+    `<p style="margin:0 0 16px;">Comanda ta la <strong>${escapeHtml(brand)}</strong> a fost înregistrată cu numărul ` +
     `<strong>${escapeHtml(reference)}</strong>.</p>` +
-    `<p>${escapeHtml(paymentNote.trim())}</p>` +
-    linesTable(lines) +
+    `<p style="margin:0 0 16px;">${escapeHtml(paymentNote.trim())}</p>` +
+    `<div style="margin:16px 0;">${linesTable(lines)}</div>` +
     totalsRowsHtml(subtotal, shippingCost, total) +
+    emailHeading(isPickup ? `Livrare — ${pickupLabel(deliveryMethod)}` : 'Livrare') +
     (isPickup
-      ? `<h3>Livrare — ${pickupLabel(deliveryMethod)}</h3><p>${escapeHtml(pickupPoint?.name ?? '—')}<br/>${escapeHtml(pickupPoint?.address ?? '—')}<br/>` +
+      ? `<p style="margin:0;">${escapeHtml(pickupPoint?.name ?? '—')}<br/>${escapeHtml(pickupPoint?.address ?? '—')}<br/>` +
         `Destinatar: ${escapeHtml(shipping.fullName)}, ${escapeHtml(shipping.phone)}</p>`
-      : `<h3>Livrare</h3><p>${escapeHtml(address.join(', '))}</p>`) +
+      : `<p style="margin:0;">${escapeHtml(address.join(', '))}</p>`) +
     (digitalLinks.length
-      ? `<h3>Produse digitale</h3><ul>` +
+      ? emailHeading('Produse digitale') +
+        `<ul style="margin:0;padding-left:20px;">` +
         digitalLinks
           .map(
             (link) =>
-              `<li><a href="${escapeHtml(link.url)}">${escapeHtml(link.title)}</a>` +
-              (link.access ? `<br/><small>${escapeHtml(link.access)}</small>` : '') +
+              `<li style="margin:0 0 8px;"><a href="${escapeHtml(link.url)}" style="color:#642a2e;">${escapeHtml(link.title)}</a>` +
+              (link.access ? `<br/><small style="color:#6b6458;">${escapeHtml(link.access)}</small>` : '') +
               `</li>`,
           )
           .join('') +
         `</ul>`
       : '') +
-    `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`
+    `<p style="margin:24px 0 0;color:#642a2e;">Cu drag, echipa ${escapeHtml(brand)}.</p>`
 
-  return { text, html }
+  return renderEmail({
+    brand,
+    eyebrow: 'Comandă confirmată',
+    title: `Comanda ${reference}`,
+    bodyHtml,
+    bodyText,
+    cta: { label: 'Urmărește comanda', url: `${getPublicUrl()}/urmarire-comanda` },
+    footerHtml: [`Ai primit acest email pentru că ai plasat o comandă la ${escapeHtml(brand)}.`],
+    footerText: [`Ai primit acest email pentru că ai plasat o comandă la ${brand}.`],
+  })
 }
 
 /** Email sent to the customer when the owner changes the order status. */
-function buildStatusEmail({ brand, reference, status, shipping }) {
+export function buildStatusEmail({ brand, reference, status, shipping }) {
   const label = ORDER_STATUS_LABELS[status] || status
   const detail = {
     processing: 'Comanda ta este pregătită și urmează să fie expediată.',
@@ -254,18 +287,30 @@ function buildStatusEmail({ brand, reference, status, shipping }) {
     cancelled: 'Comanda ta a fost anulată. Dacă ai întrebări, scrie-ne.',
     pending: 'Comanda ta este în așteptare.',
   }[status] || ''
-  const text =
+
+  const bodyText =
     `Salut, ${shipping.fullName}!\n\n` +
     `Comanda ${reference} are acum statusul: ${label}.\n` +
     (detail ? `${detail}\n` : '') +
     `\nCu drag, echipa ${brand}.`
-  const html =
-    `<p>Salut, <strong>${escapeHtml(shipping.fullName)}</strong>!</p>` +
-    `<p>Comanda <strong>${escapeHtml(reference)}</strong> are acum statusul:` +
+
+  const bodyHtml =
+    `<p style="margin:0 0 16px;">Salut, <strong>${escapeHtml(shipping.fullName)}</strong>!</p>` +
+    `<p style="margin:0 0 16px;">Comanda <strong>${escapeHtml(reference)}</strong> are acum statusul:` +
     ` <strong>${escapeHtml(label)}</strong>.</p>` +
-    (detail ? `<p>${escapeHtml(detail)}</p>` : '') +
-    `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`
-  return { text, html }
+    (detail ? `<p style="margin:0 0 16px;">${escapeHtml(detail)}</p>` : '') +
+    `<p style="margin:24px 0 0;color:#642a2e;">Cu drag, echipa ${escapeHtml(brand)}.</p>`
+
+  return renderEmail({
+    brand,
+    eyebrow: 'Comanda ta',
+    title: `${reference} — ${label}`,
+    bodyHtml,
+    bodyText,
+    cta: { label: 'Urmărește comanda', url: `${getPublicUrl()}/urmarire-comanda` },
+    footerHtml: [`Ai primit acest email pentru că ai o comandă la ${escapeHtml(brand)}.`],
+    footerText: [`Ai primit acest email pentru că ai o comandă la ${brand}.`],
+  })
 }
 
 /**
@@ -293,8 +338,12 @@ ordersRouter.post('/', optionalAuth, async (req, res) => {
   const fullName = cleanString(shipping.fullName, 160)
   const email = cleanString(shipping.email, 200).toLowerCase()
   const phone = cleanString(shipping.phone, 40)
-  if (!fullName || !isEmail(email) || !phone) {
+  if (!fullName || !email || !phone) {
     return res.status(422).json({ error: 'Completează numele, emailul și telefonul.' })
+  }
+  const emailCheck = await verifyEmail(email)
+  if (!emailCheck.ok) {
+    return res.status(422).json({ error: emailCheck.error })
   }
 
   let pickupPoint = null

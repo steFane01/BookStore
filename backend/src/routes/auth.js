@@ -7,11 +7,12 @@ import { sendMail } from '../mailer.js'
 import { getPublicUrl } from '../config.js'
 import { getSiteName } from '../settings.js'
 import { ApiError, isUniqueViolation, serverError } from '../lib/errors.js'
-import { cleanString, escapeHtml, isEmail } from '../lib/text.js'
+import { cleanString, escapeHtml } from '../lib/text.js'
+import { renderEmail } from '../lib/emailLayout.js'
+import { validatePassword } from '../lib/password.js'
+import { verifyEmail } from '../lib/emailDomain.js'
 
 export const authRouter = Router()
-
-const MIN_PASSWORD_LENGTH = 8
 
 /** Map a users row to the public `User` JSON shape the frontend expects. */
 function toUser(row) {
@@ -30,13 +31,13 @@ authRouter.post('/register', async (req, res) => {
   if (!name || !email || !password) {
     return res.status(422).json({ error: 'Numele, emailul și parola sunt obligatorii.' })
   }
-  if (!isEmail(email)) {
-    return res.status(422).json({ error: 'Adresa de email nu este validă.' })
+  const passwordCheck = validatePassword(password)
+  if (!passwordCheck.ok) {
+    return res.status(422).json({ error: passwordCheck.error })
   }
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return res
-      .status(422)
-      .json({ error: `Parola trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.` })
+  const emailCheck = await verifyEmail(email)
+  if (!emailCheck.ok) {
+    return res.status(422).json({ error: emailCheck.error })
   }
 
   try {
@@ -52,18 +53,23 @@ authRouter.post('/register', async (req, res) => {
 
     // Non-fatal: send a welcome email if mail is configured.
     try {
-      await sendMail({
-        to: user.email,
-        subject: `Bine ai venit la ${brand}`,
-        text:
+      const { text, html } = renderEmail({
+        brand,
+        eyebrow: 'Cont nou',
+        title: `Bine ai venit la ${brand}`,
+        bodyHtml:
+          `<p style="margin:0 0 16px;">Salut, <strong>${escapeHtml(user.name)}</strong>!</p>` +
+          `<p style="margin:0 0 16px;">Contul tău la <strong>${escapeHtml(brand)}</strong> a fost creat cu succes.</p>` +
+          `<p style="margin:0;color:#642a2e;">Cu drag, echipa ${escapeHtml(brand)}.</p>`,
+        bodyText:
           `Salut, ${user.name}!\n\n` +
           `Contul tău la ${brand} a fost creat cu succes.\n\n` +
           `Cu drag, echipa ${brand}.`,
-        html:
-          `<p>Salut, <strong>${escapeHtml(user.name)}</strong>!</p>` +
-          `<p>Contul tău la <strong>${escapeHtml(brand)}</strong> a fost creat cu succes.</p>` +
-          `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`,
+        cta: { label: 'Intră în librărie', url: getPublicUrl() },
+        footerHtml: [`Ai primit acest email pentru că ai creat un cont la ${escapeHtml(brand)}.`],
+        footerText: [`Ai primit acest email pentru că ai creat un cont la ${brand}.`],
       })
+      await sendMail({ to: user.email, subject: `Bine ai venit la ${brand}`, text, html })
     } catch (mailErr) {
       console.warn('[libraria] welcome email skipped:', mailErr.message)
     }
@@ -159,10 +165,9 @@ authRouter.post('/change-password', requireAuth, async (req, res) => {
   if (!currentPassword || !newPassword) {
     return res.status(422).json({ error: 'Parola actuală și parola nouă sunt obligatorii.' })
   }
-  if (newPassword.length < MIN_PASSWORD_LENGTH) {
-    return res
-      .status(422)
-      .json({ error: `Parola nouă trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.` })
+  const newPasswordCheck = validatePassword(newPassword, 'Parola nouă')
+  if (!newPasswordCheck.ok) {
+    return res.status(422).json({ error: newPasswordCheck.error })
   }
   if (newPassword === currentPassword) {
     return res.status(422).json({ error: 'Parola nouă trebuie să fie diferită de cea actuală.' })
@@ -195,8 +200,9 @@ authRouter.post('/change-password', requireAuth, async (req, res) => {
  */
 authRouter.post('/request-password-reset', async (req, res) => {
   const email = cleanString(req.body?.email, 200).toLowerCase()
-  if (!isEmail(email)) {
-    return res.status(422).json({ error: 'Adresa de email nu este validă.' })
+  const emailCheck = await verifyEmail(email)
+  if (!emailCheck.ok) {
+    return res.status(422).json({ error: emailCheck.error })
   }
   try {
     const { rows } = await pool.query('SELECT id, name, email FROM users WHERE email = $1', [email])
@@ -218,23 +224,24 @@ authRouter.post('/request-password-reset', async (req, res) => {
       const brand = await getSiteName()
       const resetUrl = `${getPublicUrl()}/resetare-parola/${token}`
       try {
-        await sendMail({
-          to: email,
-          subject: `Resetarea parolei — ${brand}`,
-          text:
+        const { text, html } = renderEmail({
+          brand,
+          eyebrow: 'Cont',
+          title: 'Resetarea parolei',
+          bodyHtml:
+            `<p style="margin:0 0 16px;">Salut, <strong>${escapeHtml(user.name)}</strong>!</p>` +
+            `<p style="margin:0 0 16px;">Ai solicitat resetarea parolei contului tău de la <strong>${escapeHtml(brand)}</strong>.</p>` +
+            `<p style="margin:0;">Dacă nu ai fost tu, poți ignora acest email.</p>`,
+          bodyText:
             `Salut, ${user.name}!\n\n` +
             `Ai solicitat resetarea parolei contului tău de la ${brand}.\n` +
-            `Deschide linkul de mai jos pentru a alege o parolă nouă (valabil 1 oră):\n\n` +
-            `${resetUrl}\n\n` +
-            `Dacă nu ai fost tu, poți ignora acest email.\n\n` +
-            `Cu drag, echipa ${brand}.`,
-          html:
-            `<p>Salut, <strong>${escapeHtml(user.name)}</strong>!</p>` +
-            `<p>Ai solicitat resetarea parolei contului tău de la <strong>${escapeHtml(brand)}</strong>.</p>` +
-            `<p><a href="${escapeHtml(resetUrl)}">Alege o parolă nouă aici</a> (linkul este valabil 1 oră).</p>` +
-            `<p>Dacă nu ai fost tu, poți ignora acest email.</p>` +
-            `<p style="color:#642A2E">Cu drag, echipa ${escapeHtml(brand)}.</p>`,
+            `Deschide linkul de mai jos pentru a alege o parolă nouă (valabil 1 oră).\n\n` +
+            `Dacă nu ai fost tu, poți ignora acest email.`,
+          cta: { label: 'Alege o parolă nouă', url: resetUrl },
+          footerHtml: ['Linkul este valabil 1 oră. Dacă nu ai solicitat resetarea, ignoră acest email.'],
+          footerText: ['Linkul este valabil 1 oră. Dacă nu ai solicitat resetarea, ignoră acest email.'],
         })
+        await sendMail({ to: email, subject: `Resetarea parolei — ${brand}`, text, html })
       } catch (mailErr) {
         console.warn('[libraria] reset email skipped:', mailErr.message)
       }
@@ -257,10 +264,9 @@ authRouter.post('/reset-password', async (req, res) => {
   if (!token || !password) {
     return res.status(422).json({ error: 'Tokenul și noua parolă sunt obligatorii.' })
   }
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    return res
-      .status(422)
-      .json({ error: `Parola trebuie să aibă cel puțin ${MIN_PASSWORD_LENGTH} caractere.` })
+  const passwordCheck = validatePassword(password)
+  if (!passwordCheck.ok) {
+    return res.status(422).json({ error: passwordCheck.error })
   }
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex')

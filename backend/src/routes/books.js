@@ -5,6 +5,8 @@ import { pool } from '../db.js'
 import { requireAdmin } from '../auth.js'
 import { ApiError, isUniqueViolation, serverError } from '../lib/errors.js'
 import { cleanString } from '../lib/text.js'
+import { cleanImageUrl } from '../lib/imageUrl.js'
+import { likePattern, searchExpression } from '../lib/search.js'
 
 export const booksRouter = Router()
 
@@ -148,18 +150,53 @@ function bodyToColumns(body) {
   }
 }
 
-/** GET /api/books — public active catalog (optionally filtered by category). */
+/**
+ * GET /api/books — public active catalog.
+ *
+ * Optional query params:
+ *   categorie=<id|slug>  filter by collection
+ *   q=<text>             live search over title, author, category, teaser & ISBN
+ *                        (accent-insensitive: „carti” matches „Cărți”)
+ */
 booksRouter.get('/', async (req, res) => {
   const category = typeof req.query.categorie === 'string' ? req.query.categorie.trim() : ''
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   try {
     const params = []
-    let where = `status = 'active'`
+    const conditions = [`status = 'active'`]
     if (category) {
       params.push(category)
-      where += ` AND (category_id = $${params.length} OR LOWER(category) = LOWER($${params.length}))`
+      conditions.push(
+        `(category_id = $${params.length} OR LOWER(category) = LOWER($${params.length}))`,
+      )
     }
+
+    const pattern = likePattern(query)
+    let order = 'featured DESC, title ASC'
+    if (pattern) {
+      params.push(pattern)
+      const p = `$${params.length}`
+      conditions.push(
+        `(${searchExpression('title')} LIKE ${p} ESCAPE '\\'` +
+          ` OR ${searchExpression('author')} LIKE ${p} ESCAPE '\\'` +
+          ` OR ${searchExpression("COALESCE(category, '')")} LIKE ${p} ESCAPE '\\'` +
+          ` OR ${searchExpression("COALESCE(short_description, '')")} LIKE ${p} ESCAPE '\\'` +
+          ` OR ${searchExpression("COALESCE(isbn, '')")} LIKE ${p} ESCAPE '\\'` +
+          ` OR EXISTS (` +
+          `SELECT 1 FROM product_categories pc` +
+          ` WHERE pc.id = books.category_id` +
+          ` AND (${searchExpression('pc.name')} LIKE ${p} ESCAPE '\\'` +
+          ` OR ${searchExpression('pc.slug')} LIKE ${p} ESCAPE '\\')))`,
+      )
+      // Title matches first, then author matches, then everything else.
+      order =
+        `CASE WHEN ${searchExpression('title')} LIKE ${p} ESCAPE '\\' THEN 0` +
+        ` WHEN ${searchExpression('author')} LIKE ${p} ESCAPE '\\' THEN 1` +
+        ` ELSE 2 END, ${order}`
+    }
+
     const { rows } = await pool.query(
-      `SELECT ${PUBLIC_COLUMNS} FROM books WHERE ${where} ORDER BY featured DESC, title ASC`,
+      `SELECT ${PUBLIC_COLUMNS} FROM books WHERE ${conditions.join(' AND ')} ORDER BY ${order}`,
       params,
     )
     return res.json(rows.map((row) => rowToBook(row)))
@@ -184,7 +221,8 @@ booksRouter.get('/all', requireAdmin, async (_req, res) => {
 booksRouter.get('/categories', async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, name, slug, blurb, sort FROM product_categories ORDER BY sort ASC, name ASC',
+      `SELECT id, name, slug, blurb, description, image_url AS "imageUrl", sort
+       FROM product_categories ORDER BY sort ASC, name ASC`,
     )
     return res.json(rows)
   } catch (err) {
@@ -196,15 +234,17 @@ booksRouter.get('/categories', async (_req, res) => {
 booksRouter.post('/categories', requireAdmin, async (req, res) => {
   const name = cleanString(req.body?.name, 120)
   const blurb = cleanString(req.body?.blurb, 400)
+  const description = cleanString(req.body?.description, 3000)
+  const imageUrl = cleanImageUrl(req.body?.imageUrl)
   const sort = Number.isFinite(Number(req.body?.sort)) ? Number(req.body.sort) : 0
   if (!name) return res.status(422).json({ error: 'Numele categoriei este obligatoriu.' })
   const id = slugify(name)
   try {
     const { rows } = await pool.query(
-      `INSERT INTO product_categories (id, name, slug, blurb, sort)
-       VALUES ($1, $2, $1, $3, $4)
-       RETURNING id, name, slug, blurb, sort`,
-      [id, name, blurb, sort],
+      `INSERT INTO product_categories (id, name, slug, blurb, description, image_url, sort)
+       VALUES ($1, $2, $1, $3, $4, $5, $6)
+       RETURNING id, name, slug, blurb, description, image_url AS "imageUrl", sort`,
+      [id, name, blurb, description, imageUrl || null, sort],
     )
     return res.status(201).json(rows[0])
   } catch (err) {
@@ -215,17 +255,21 @@ booksRouter.post('/categories', requireAdmin, async (req, res) => {
   }
 })
 
-/** PUT /api/books/categories/:id — rename / reorder, admin only. */
+/** PUT /api/books/categories/:id — rename / reorder / edit the landing page. */
 booksRouter.put('/categories/:id', requireAdmin, async (req, res) => {
   const name = cleanString(req.body?.name, 120)
   const blurb = cleanString(req.body?.blurb, 400)
+  const description = cleanString(req.body?.description, 3000)
+  const imageUrl = cleanImageUrl(req.body?.imageUrl)
   const sort = Number.isFinite(Number(req.body?.sort)) ? Number(req.body.sort) : 0
   if (!name) return res.status(422).json({ error: 'Numele categoriei este obligatoriu.' })
   try {
     const { rows } = await pool.query(
-      `UPDATE product_categories SET name = $1, blurb = $2, sort = $3
-       WHERE id = $4 RETURNING id, name, slug, blurb, sort`,
-      [name, blurb, sort, req.params.id],
+      `UPDATE product_categories
+       SET name = $1, blurb = $2, description = $3, image_url = $4, sort = $5
+       WHERE id = $6
+       RETURNING id, name, slug, blurb, description, image_url AS "imageUrl", sort`,
+      [name, blurb, description, imageUrl || null, sort, req.params.id],
     )
     if (rows.length === 0) return res.status(404).json({ error: 'Categoria nu a fost găsită.' })
     return res.json(rows[0])

@@ -82,6 +82,10 @@ export interface ProductCategory {
   name: string
   slug: string
   blurb: string
+  /** Longer copy shown under the big title on the category page. */
+  description?: string
+  /** Owner-uploaded image shown on the category page. */
+  imageUrl?: string
   sort?: number
 }
 
