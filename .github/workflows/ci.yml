@@ -1,15 +1,23 @@
 # -----------------------------------------------------------------------------
-# CI/CD — Librăria bookstore
+# CI — Librăria bookstore
 #
-# This workflow runs in GitHub Actions every time you push code or open a PR.
-# Read the comments to understand each step — this is the "pipeline".
+# Runs on every push / pull request to `main` and can be started manually from
+# the Actions tab. The pipeline has two kinds of stages:
 #
-# You can see the runs here:  https://github.com/<you>/BookStore/actions
+#   1. CODE CHECKS
+#        - frontend: install, TypeScript type-check, production build
+#        - backend:  install, syntax check of every file, unit tests
+#   2. IMAGE BUILDS
+#        - both Dockerfiles are built on a clean runner (same contexts as the
+#          deploy), so a broken Dockerfile fails before it reaches the server.
+#
+# Runners are pinned to `ubuntu-24.04` on purpose: GitHub is migrating the
+# `ubuntu-latest` label to Ubuntu 26 (runner-images#14748, starting Oct 2026).
+# A fixed image keeps the pipeline reproducible until Ubuntu 26 is validated.
 # -----------------------------------------------------------------------------
 
 name: CI / CD
 
-# "on" = WHEN the pipeline runs.
 on:
   push:                 # on every push ...
     branches: [main]    #   ... to the main branch
@@ -17,74 +25,110 @@ on:
     branches: [main]
   workflow_dispatch:    # also allow manual runs from the Actions tab
 
-# A workflow is made of "jobs". Each job runs in its own fresh VM.
-jobs:
-  # --- Job 1: build + verify the frontend -----------------------------------
-  frontend:
-    name: Frontend (type-check + build)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4           # step 1: copy your code into the VM
+permissions:
+  contents: read
 
-      - uses: actions/setup-node@v4         # step 2: install Node.js
+# A newer push cancels an older run of the same branch (saves CI minutes).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # --- Stage 1a: code checks — frontend --------------------------------------
+  frontend:
+    name: Check frontend (type-check + build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci                         # 'npm ci' = clean install from lockfile
+        run: npm ci
 
       - name: Type-check (tsc)
-        run: npx tsc --noEmit               # fail if there are TypeScript errors
+        run: npm run typecheck
 
       - name: Production build (vite)
-        run: npx vite build                 # fail if the app can't build
+        run: npm run build
 
-      # Optional: upload the built files as a downloadable artifact.
+      # Optional: download the built site from the run page.
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
           path: dist/
+          retention-days: 7
 
-  # --- Job 2: build the backend ---------------------------------------------
+  # --- Stage 1b: code checks — backend ---------------------------------------
   backend:
-    name: Backend (install + syntax check)
-    runs-on: ubuntu-latest
+    name: Check backend (syntax + unit tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
       - name: Install dependencies
         run: npm ci
-      - name: Syntax check server
-        run: node --check src/server.js      # fail if there is a syntax error
+
+      - name: Syntax-check every source file
+        run: |
+          set -euo pipefail
+          find src -name '*.js' -print0 | xargs -0 -n1 node --check
 
       - name: Unit tests
-        run: npm test                        # node --test (pricing, escaping, settings)
+        run: npm test
 
-  # --- Job 3: build the Docker images ---------------------------------------
-  # This proves your Dockerfiles work on a clean machine. It runs only after
-  # the two jobs above pass (the 'needs' line).
+  # --- Stage 2: build the Docker images --------------------------------------
+  # Runs only after both check jobs pass. Buildx + GitHub Actions cache keeps
+  # repeated runs fast; nothing is pushed (there is no registry configured).
   docker:
     name: Build Docker images
-    runs-on: ubuntu-latest
-    needs: [frontend, backend]               # wait for the two above to pass
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [frontend, backend]
     steps:
       - uses: actions/checkout@v4
-      - name: Build all images
-        run: |
-          docker compose build
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config -q
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          tags: libraria-backend:ci
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: false
+          tags: libraria-frontend:ci
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
 # -----------------------------------------------------------------------------
-# NOTE: This is the "CI" (Continuous Integration) half — it verifies the code.
-# The "CD" (Continuous Deployment) half would actually SHIP your app. To do
-# that after these green checks, you would add a step that pushes the images
-# to Docker Hub (docker/login-action + docker/build-push-action) and tells a
-# server to pull them. Keep this CI first; add CD once you have a host.
+# This is the CI half — it verifies code + images. The deploy workflow
+# (deploy.yml) runs after this one finishes successfully on `main`.
 # -----------------------------------------------------------------------------

@@ -37,7 +37,10 @@ concurrency:
 jobs:
   deploy:
     name: SSH deploy
-    runs-on: ubuntu-latest
+    # Pinned runner: `ubuntu-latest` is being migrated to Ubuntu 26
+    # (runner-images#14748). Keep 24.04 until the new image is validated.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
